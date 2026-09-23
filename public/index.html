@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام إدارة العلوة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Roboto+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg viewBox="0 0 64 64" fill="none">
+        <rect x="8" y="28" width="48" height="5" rx="2.5" fill="#5B8A6F"/>
+        <line x1="32" y1="12" x2="32" y2="28" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M32 14 L46 14" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M32 14 L18 14" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M46 14 L38 28 L54 28 Z" fill="#5B8A6F" stroke="#FFFFFF" stroke-width="2"/>
+        <path d="M18 14 L10 28 L26 28 Z" fill="#5B8A6F" stroke="#FFFFFF" stroke-width="2"/>
+        <rect x="22" y="44" width="20" height="12" rx="3" fill="#C4714A"/>
+      </svg>
+    </div>
+    <h1 id="loginStoreName">نظام إدارة العلوة</h1>
+    <p>طحين • أعلاف • حسابات آجلة</p>
+    <div style="margin-bottom:14px;"><span class="zimam-pill">✨ ضمن منظومة زمام الذكية</span></div>
+    
+    <div class="form-group">
+      <label class="form-label" for="loginName">اسم المستخدم</label>
+      <input class="form-control" id="loginName" placeholder="مثال: المالك" autocomplete="username">
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label" for="loginPassword">رمز الدخول (PIN)</label>
+      <input type="password" class="form-control is-num" id="loginPassword" placeholder="••••" autocomplete="current-password">
+    </div>
+    
+    <div id="loginError" class="login-error"></div>
+    <button class="btn btn-primary" style="width:100%;padding:11px;font-size:14.5px;margin-top:4px;" onclick="doLogin()">تسجيل الدخول</button>
+  </div>
+</div>
+
+<!-- ═══ MAIN APPLICATION SHELL ═══ -->
+<div id="mainApp" style="display:none;">
+  <div class="app-shell">
+    
+    <!-- ─── SIDEBAR ─── -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-icon">
+          <svg viewBox="0 0 64 64" fill="none">
+            <rect x="8" y="28" width="48" height="5" rx="2.5" fill="#FFFFFF"/>
+            <line x1="32" y1="12" x2="32" y2="28" stroke="#FFFFFF" stroke-width="3"/>
+            <path d="M46 14 L38 28 L54 28 Z" fill="#C4714A"/>
+            <path d="M18 14 L10 28 L26 28 Z" fill="#C4714A"/>
+            <rect x="22" y="44" width="20" height="12" rx="3" fill="#FFFFFF"/>
+          </svg>
+        </div>
+        <div class="sidebar-logo-text">
+          <strong id="sidebarStoreName">نظام إدارة العلوة</strong>
+          <span class="zimam-pill-sidebar">منظومة زمام</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">الرئيسية</div>
+        <button class="navbtn active" data-scr="dashboard" onclick="showScreen('dashboard')">
+          <span class="nav-icon">📊</span><span class="nav-label">لوحة المعلومات</span>
+        </button>
+        <button class="navbtn" data-scr="pos" onclick="showScreen('pos')">
+          <span class="nav-icon">🧮</span><span class="nav-label">نقطة البيع (F2)</span>
+        </button>
+
+        <div class="nav-group-label">العمليات اليومية</div>
+        <button class="navbtn" data-scr="customers" onclick="showScreen('customers')">
+          <span class="nav-icon">👥</span><span class="nav-label">الزبائن والديون</span>
+        </button>
+        <button class="navbtn" data-scr="inventory" onclick="showScreen('inventory')">
+          <span class="nav-icon">📦</span><span class="nav-label">المخزون والمواد</span>
+          <span class="nav-badge" id="navLowStockBadge" style="display:none;">0</span>
+        </button>
+        <button class="navbtn" data-scr="suppliers" onclick="showScreen('suppliers')">
+          <span class="nav-icon">🚚</span><span class="nav-label">الموردون والشراء</span>
+        </button>
+        <button class="navbtn" data-scr="cashbox" onclick="showScreen('cashbox')">
+          <span class="nav-icon">💰</span><span class="nav-label">صندوق النقدية</span>
+        </button>
+        <button class="navbtn" data-scr="reports" onclick="showScreen('reports')">
+          <span class="nav-icon">📈</span><span class="nav-label">التقارير والأرباح</span>
+        </button>
+
+        <div class="nav-group-label owner-only">الإدارة والنظام</div>
+        <button class="navbtn owner-only" data-scr="backup" onclick="showScreen('backup')">
+          <span class="nav-icon">🗄️</span><span class="nav-label">النسخ الاحتياطي</span>
+        </button>
+        <button class="navbtn owner-only" data-scr="users" onclick="showScreen('users')">
+          <span class="nav-icon">👤</span><span class="nav-label">المستخدمون</span>
+        </button>
+        <button class="navbtn owner-only" data-scr="activitylog" onclick="showScreen('activitylog')">
+          <span class="nav-icon">🕵️</span><span class="nav-label">سجل العمليات</span>
+        </button>
+        <button class="navbtn owner-only" data-scr="settings" onclick="showScreen('settings')">
+          <span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar" id="avatarInitial">م</div>
+          <div class="sidebar-user-info">
+            <strong id="userNameLbl">المالك</strong>
+            <span id="roleLbl">المالك</span>
+          </div>
+        </div>
+        <button class="sidebar-logout" onclick="doLogout()">
+          <span>🚪</span> تسجيل الخروج
+        </button>
+      </div>
+    </aside>
+
+    <!-- ─── CONTENT CONTAINER ─── -->
+    <main class="content">
+
+      <!-- TOPBAR -->
+      <header class="page-topbar">
+        <div class="page-topbar-title">
+          <h2 id="topbarTitle">لوحة المعلومات</h2>
+          <p id="topbarSubtitle">نظرة عامة على نشاط اليوم والمؤشرات المالية</p>
+        </div>
+        <div class="page-topbar-actions">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="topbar-btn" id="themeToggleBtn" onclick="toggleTheme()" title="تبديل الوضع الليلي / الفاتح">
+              <span id="themeToggleIcon">🌙</span> <span id="themeToggleText">ليلي</span>
+            </button>
+            <button class="topbar-btn" onclick="openCurrencyConverterModal()" title="محول العملة اليومي (دينار / دولار)">
+              <span>💵</span> <span>الدولار</span>
+            </button>
+            <button class="topbar-btn" onclick="openShortcutsModal()" title="دليل اختصارات لوحة المفاتيح (F1)">
+              <span>⌨️</span> <span>F1</span>
+            </button>
+          </div>
+          <div id="topbarClock" class="num" style="font-size:13px;color:var(--text-secondary);padding:5px 10px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);"></div>
+        </div>
+      </header>
+
+      <!-- ─── SCREEN: DASHBOARD ─── -->
+      <section class="screen active" id="screen-dashboard">
+        <div class="page-body">
+          <div class="quick-actions-bar">
+            <button class="action-card-btn" onclick="showScreen('pos')">
+              <span style="font-size:16px;">🧮</span> بيع جديد (F2)
+            </button>
+            <button class="action-card-btn" onclick="showScreen('customers'); openCustomerModal();">
+              <span style="font-size:16px;">👤</span> زبون جديد
+            </button>
+            <button class="action-card-btn" onclick="showScreen('inventory'); openItemModal();">
+              <span style="font-size:16px;">📦</span> مادة جديدة
+            </button>
+            <button class="action-card-btn" onclick="showScreen('cashbox'); openCashModal();">
+              <span style="font-size:16px;">💰</span> حركة صندوق
+            </button>
+            <button class="action-card-btn" onclick="refreshDashboard()">
+              <span style="font-size:16px;">🔄</span> تحديث
+            </button>
+          </div>
+
+          <!-- KPI Stat Cards -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">مبيعات اليوم</div>
+              <div class="stat-value" id="dashTodaySales">0</div>
+              <div class="stat-sub" id="dashTodaySalesSub">0 قوائم بيع</div>
+            </div>
+            <div class="stat-card info">
+              <div class="stat-label">صندوق النقدية المتوفر</div>
+              <div class="stat-value" id="dashCashBalance">0</div>
+              <div class="stat-sub">السيولة الحالية</div>
+            </div>
+            <div class="stat-card terra">
+              <div class="stat-label">إجمالي ديون الزبائن</div>
+              <div class="stat-value" id="dashTotalDebts">0</div>
+              <div class="stat-sub">مستحقات آجلة بالذمة</div>
+            </div>
+            <div class="stat-card danger" id="dashLowStockCard">
+              <div class="stat-label">مواد قريبة من النفاد</div>
+              <div class="stat-value" id="dashLowStockCount">0</div>
+              <div class="stat-sub">تحت حد التنبيه</div>
+            </div>
+          </div>
+
+          <!-- Split Sections: Recent Invoices & Low Stock Alert -->
+          <div class="grid2">
+            <div class="card">
+              <div class="card-header">
+                <h3><span>🧾</span> أحدث فواتير البيع اليوم</h3>
+                <button class="btn btn-sm btn-secondary" onclick="showScreen('reports')">عرض الكل</button>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>رقم</th><th>الزبون</th><th>الإجمالي</th><th>الواصل</th><th>الباقي</th></tr>
+                  </thead>
+                  <tbody id="dashRecentInvoicesBody">
+                    <tr><td colspan="5" class="empty-state">جاري تحميل البيانات...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3><span>⚠️</span> تنبيهات المخزون المنخفض</h3>
+                <button class="btn btn-sm btn-secondary" onclick="showScreen('inventory')">إدارة المخزون</button>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>المادة</th><th>المخزون الحالي</th><th>حد التنبيه</th><th>الحالة</th></tr>
+                  </thead>
+                  <tbody id="dashLowStockBody">
+                    <tr><td colspan="4" class="empty-state">المخزون في حالة ممتازة ولا توجد نواقص</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: POS ─── -->
+      <section class="screen" id="screen-pos">
+        <div class="page-body" style="padding-top:12px;">
+          <div class="pos-layout">
+            <div>
+              <!-- Customer Selection Card -->
+              <div class="card" style="margin-bottom:12px;">
+                <div class="card-header">
+                  <h3><span>👤</span> بيانات الزبون</h3>
+                  <div style="display:flex;gap:6px;">
+                    <button class="held-btn" id="posHeldBtn" onclick="openHeldInvoicesModal()" title="الفواتير المعلقة (F8)">
+                      <span>🗂️</span> <span>معلقة (F8)</span> <span class="held-badge" id="heldCountBadge">0</span>
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="openCustomerModal()">+ زبون جديد</button>
+                  </div>
+                </div>
+                <div class="card-body" style="padding:12px 16px;">
+                  <div class="search-wrap">
+                    <input class="form-control" id="posCustSearch" placeholder="ابحث عن زبون بالاسم أو اللقب أو الهاتف (F3)..." oninput="posFilterCustomers()">
+                    <span class="search-icon">🔍</span>
+                  </div>
+                  <div id="posCustResults"></div>
+                  <div id="posCustSelected"></div>
+                </div>
+              </div>
+
+              <!-- Item Selection Card -->
+              <div class="card" style="margin-bottom:12px;">
+                <div class="card-header">
+                  <h3><span>📦</span> إضافة المواد أو مسح الباركود</h3>
+                  <button class="btn btn-sm btn-danger" onclick="openReturnModal()">↩️ إرجاع مواد</button>
+                </div>
+                <div class="card-body" style="padding:12px 16px;">
+                  <div class="search-wrap">
+                    <input class="form-control" id="posItemSearch" placeholder="ابحث عن مادة أو امسح الباركود مباشرة (F4)..." oninput="posFilterItems()">
+                    <span class="search-icon">🔍</span>
+                  </div>
+                  <div id="posItemResults"></div>
+                </div>
+              </div>
+
+              <!-- Invoice Lines Table -->
+              <div class="card">
+                <div class="card-header">
+                  <h3><span>📋</span> قائمة المواد الحالية</h3>
+                </div>
+                <div class="tbl-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>المادة</th><th>الكمية</th><th>الوحدة</th><th>السعر</th><th>الإجمالي</th><th></th></tr>
+                    </thead>
+                    <tbody id="posLinesBody">
+                      <tr><td colspan="6" class="empty-state">لم يتم إضافة مواد بعد. اختر مادة أعلاه لإضافتها للقائمة</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Invoice Totals & Checkout Column -->
+            <div>
+              <div class="card sticky-total">
+                <div class="card-header">
+                  <h3><span>💳</span> ملخص الحساب والدفع</h3>
+                </div>
+                <div class="card-body">
+                  <div class="pos-total-panel">
+                    <div class="ptotal-label">المجموع الكلي للقائمة</div>
+                    <div class="ptotal-value" id="posTotal">0</div>
+                    <div class="dual-currency-sub" id="posTotalUSD">≈ $ 0.00</div>
+                  </div>
+
+                  <div id="posPrevDebtBox" class="card" style="background:var(--bg-raised);padding:10px 14px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                      <span class="sub" id="posPrevDebtLbl">الدين السابق على الزبون</span>
+                      <strong class="num" id="posPrevDebt" style="font-size:16px;color:var(--text-heading);">0</strong>
+                    </div>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom:4px;">
+                    <label class="form-label" for="posPaid">المبلغ الواصل (نقدياً)</label>
+                    <input type="number" class="form-control is-num" id="posPaid" placeholder="0" oninput="posRecalc()" style="font-size:16px;font-weight:700;">
+                  </div>
+
+                  <div class="quick-cash-row">
+                    <button type="button" class="quick-cash-btn" onclick="posSetQuickPaid('full')">واصل بالكامل (نقد)</button>
+                    <button type="button" class="quick-cash-btn" onclick="posSetQuickPaid('zero')">آجل كامل (0)</button>
+                    <button type="button" class="quick-cash-btn" onclick="posAddQuickCash(10000)">+10 آلاف</button>
+                    <button type="button" class="quick-cash-btn" onclick="posAddQuickCash(25000)">+25 ألف</button>
+                    <button type="button" class="quick-cash-btn" onclick="posAddQuickCash(50000)">+50 ألف</button>
+                    <button type="button" class="quick-cash-btn" onclick="posAddQuickCash(100000)">+100 ألف</button>
+                  </div>
+
+                  <div class="grid2" style="margin-bottom:12px;">
+                    <div>
+                      <span class="sub">المتبقي (آجل)</span>
+                      <div class="num" id="posRemain" style="font-size:18px;font-weight:700;color:var(--danger-text);margin-top:2px;">0</div>
+                    </div>
+                    <div>
+                      <label class="sub" for="posDueDate" style="display:block;margin-bottom:2px;">تاريخ الاستحقاق</label>
+                      <input type="date" class="form-control" id="posDueDate" style="padding:6px 8px;font-size:12px;">
+                    </div>
+                  </div>
+
+                  <div class="grid2" style="margin-bottom:12px;">
+                    <div>
+                      <label class="sub" for="posDriverName" style="display:block;margin-bottom:2px;">اسم السائق</label>
+                      <input class="form-control" id="posDriverName" placeholder="اختياري">
+                    </div>
+                    <div>
+                      <label class="sub" for="posDriverPhone" style="display:block;margin-bottom:2px;">هاتف السائق</label>
+                      <input class="form-control" id="posDriverPhone" placeholder="اختياري">
+                    </div>
+                  </div>
+
+                  <div id="posOverrideWrap" style="display:none;margin-bottom:12px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                      <label class="form-label" style="color:var(--danger-text);">رمز تأكيد المالك لتجاوز سقف الدين</label>
+                      <input type="password" class="form-control is-num" id="posOverridePin" placeholder="••••">
+                    </div>
+                  </div>
+
+                  <button class="pos-save-btn" onclick="saveInvoice()">
+                    <span>💾</span> حفظ وطباعة الفاتورة (F2)
+                  </button>
+                  <button class="btn btn-secondary" style="width:100%;margin-top:6px;" onclick="holdCurrentInvoice()">
+                    <span>⏸️</span> تعليق الفاتورة الحالية (F8)
+                  </button>
+                  <button class="btn btn-secondary" style="width:100%;margin-top:6px;" onclick="clearPOS()">
+                    تفريغ وإلغاء القائمة (Esc)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: CUSTOMERS ─── -->
+      <section class="screen" id="screen-customers">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header">
+              <h3><span>👥</span> إدارة حسابات الزبائن والديون</h3>
+              <button class="btn btn-primary" onclick="openCustomerModal()">+ زبون جديد</button>
+            </div>
+            <div class="card-body">
+              <div class="search-wrap">
+                <input class="form-control" id="custSearchMain" placeholder="ابحث باسم الزبون أو لقبه أو هاتفه..." oninput="renderCustomersTable()">
+                <span class="search-icon">🔍</span>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>الاسم</th><th>اللقب</th><th>الهاتف</th><th>الفئة</th><th>سقف الدين</th><th>الرصيد الحالي</th><th>الإجراءات</th></tr>
+                  </thead>
+                  <tbody id="customersTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: INVENTORY ─── -->
+      <section class="screen" id="screen-inventory">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header">
+              <h3><span>📦</span> إدارة المواد والمخزون والأسعار</h3>
+              <button class="btn btn-primary" onclick="openItemModal()">+ مادة جديدة</button>
+            </div>
+            <div class="card-body">
+              <div class="search-wrap">
+                <input class="form-control" id="itemSearchMain" placeholder="ابحث عن مادة أو امسح الباركود..." oninput="renderInventoryTable()">
+                <span class="search-icon">🔍</span>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>المادة</th><th>وزن الكيس</th><th>المخزون (كغم)</th><th>سعر الجملة</th><th>سعر المكاتب</th><th>سعر العادي</th><th>الباركود</th><th>الإجراءات</th></tr>
+                  </thead>
+                  <tbody id="inventoryTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: SUPPLIERS ─── -->
+      <section class="screen" id="screen-suppliers">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header">
+              <h3><span>🚚</span> الموردون وفواتير الشراء</h3>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-secondary" onclick="openSupplierModal()">+ مورد جديد</button>
+                <button class="btn btn-primary" onclick="openPurchaseModal()">+ فاتورة شراء جديدة</button>
+                <button class="btn btn-danger" onclick="openSupplierReturnModal()">↩️ إرجاع للمورد</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>اسم المورد</th><th>الهاتف</th><th>رصيد المورد المستحق</th><th>الإجراءات</th></tr>
+                  </thead>
+                  <tbody id="suppliersTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: CASHBOX ─── -->
+      <section class="screen" id="screen-cashbox">
+        <div class="page-body">
+          <div class="stats-row" id="cashStatsRow"></div>
+          <div class="card">
+            <div class="card-header">
+              <h3><span>💰</span> سجل حركات الصندوق الفعلية</h3>
+              <button class="btn btn-primary" onclick="openCashModal()">+ حركة نقدية يدوية</button>
+            </div>
+            <div class="card-body">
+              <div class="grid3" style="margin-bottom:14px;">
+                <div><label class="form-label">من تاريخ</label><input type="date" class="form-control" id="cashFrom" onchange="renderCashboxTable()"></div>
+                <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-control" id="cashTo" onchange="renderCashboxTable()"></div>
+                <div style="align-self:end;"><button class="btn btn-secondary" style="width:100%;" onclick="resetCashDates()">عرض حركات اليوم</button></div>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>التاريخ</th><th>النوع</th><th>الجهة / المصدر</th><th>الزبون</th><th>البيان</th><th>المبلغ</th></tr>
+                  </thead>
+                  <tbody id="cashboxTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: REPORTS ─── -->
+      <section class="screen" id="screen-reports">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header"><h3><span>📋</span> ملخص حركة اليومية</h3></div>
+            <div class="card-body"><div id="dailySummaryBox"></div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3><span>📅</span> التقرير الدوري الأسبوعي</h3></div>
+            <div class="card-body">
+              <div class="grid3" style="margin-bottom:14px;">
+                <div><label class="form-label">من تاريخ</label><input type="date" class="form-control" id="weekFrom" onchange="renderWeeklyReport()"></div>
+                <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-control" id="weekTo" onchange="renderWeeklyReport()"></div>
+                <div style="align-self:end;"><button class="btn btn-secondary" style="width:100%;" onclick="setCurrentWeek()">الأسبوع الحالي</button></div>
+              </div>
+              <div class="stats-row" id="weeklyStatsRow"></div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>الزبون</th><th>عدد القوائم</th><th>الإجمالي</th><th>الواصل</th><th>الآجل</th></tr>
+                  </thead>
+                  <tbody id="weeklyCustomersBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3><span>💹</span> تقرير أرباح المواد الصافية</h3></div>
+            <div class="card-body">
+              <div class="grid3" style="margin-bottom:14px;">
+                <div><label class="form-label">من تاريخ</label><input type="date" class="form-control" id="profitFrom"></div>
+                <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-control" id="profitTo"></div>
+                <div style="align-self:end;"><button class="btn btn-primary" style="width:100%;" onclick="renderProfitReport()">عرض تقرير الأرباح</button></div>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>المادة</th><th>الكمية المباعة (كغم)</th><th>الإيراد الإجمالي</th><th>التكلفة الحقيقية</th><th>صافي الربح</th></tr>
+                  </thead>
+                  <tbody id="profitTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3><span>📒</span> كشف حساب تفصيلي (زبون / مورد)</h3></div>
+            <div class="card-body">
+              <div class="grid2" style="margin-bottom:14px;">
+                <div><label class="form-label">النوع</label><select class="form-control" id="ledgerType" onchange="fillLedgerSelect()"><option value="customer">زبون</option><option value="supplier">مورد</option></select></div>
+                <div><label class="form-label">الجهة</label><select class="form-control" id="ledgerSelect" onchange="renderLedgerReport()"></select></div>
+              </div>
+              <div id="ledgerBox"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: BACKUP & DATA PROTECTION ─── -->
+      <section class="screen" id="screen-backup">
+        <div class="page-body">
+          <!-- Automated Local Backups Card -->
+          <div class="card">
+            <div class="card-header">
+              <h3><span>🛡️</span> النسخ الاحتياطية التلقائية للنظام</h3>
+              <button class="btn btn-primary" onclick="createAutoBackupNow()">+ إنشاء نسخة احتياطية فورية الآن</button>
+            </div>
+            <div class="card-body">
+              <p class="sub" style="margin-bottom:12px;">يقوم النظام بأخذ نسخة احتياطية محلية تلقائية لقاعدة البيانات كل 6 ساعات وحفظها في مجلد النظام مع التدوير الذاتي.</p>
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>اسم ملف النسخة</th><th>الحجم</th><th>تاريخ ووقت الإنشاء</th></tr>
+                  </thead>
+                  <tbody id="autoBackupsTableBody">
+                    <tr><td colspan="3" class="empty-state">جاري قراءة النسخ الاحتياطية المتوفرة...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual SQL Export/Import -->
+          <div class="grid2">
+            <div class="card">
+              <div class="card-header"><h3><span>📦</span> تصدير ملف SQL كامل</h3></div>
+              <div class="card-body">
+                <p class="sub" style="margin-bottom:14px;">تنزيل نسخة نصية SQL حقيقية لكامل جداول وبيانات النظام يمكن حفظها على فلاشة أو قرص خارجي.</p>
+                <button class="btn btn-secondary" onclick="downloadSQLBackup()">⬇️ تنزيل نسخة SQL الآن</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><h3><span>📥</span> استيراد قاعدة بيانات SQL</h3></div>
+              <div class="card-body">
+                <p class="sub" style="color:var(--danger-text);font-weight:700;margin-bottom:14px;">⚠️ تحذير: استيراد ملف SQL سيقوم باستبدال كامل البيانات الحالية للبرنامج بالبيانات المستوردة.</p>
+                <label class="btn btn-danger" style="display:inline-flex;">
+                  <span>📂</span> اختيار واستيراد ملف SQL
+                  <input type="file" id="sqlImportFile" accept=".sql" style="display:none;" onchange="handleSqlImport(event)">
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Google Drive Integration -->
+          <div class="card">
+            <div class="card-header"><h3><span>☁️</span> الربط السحابي مع Google Drive</h3></div>
+            <div class="card-body">
+              <p class="sub" style="margin-bottom:14px;">إمكانية رفع النسخة الاحتياطية مباشرة إلى حساب Google Drive الخاص بك تلقائياً.</p>
+              <div class="form-group"><label class="form-label">معرّف عميل Google OAuth (Client ID)</label><input class="form-control is-num" id="gdriveClientId" placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="saveGDriveClientId()">💾 حفظ المعرّف</button>
+                <button class="btn btn-primary" onclick="connectGoogleDrive()">🔗 ربط حساب Google Drive</button>
+              </div>
+              <div id="gdriveStatus" class="sub" style="margin-top:10px;"></div>
+              <div id="gdriveActions" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-subtle);">
+                <button class="btn btn-success" onclick="uploadBackupToDrive()">☁️ رفع نسخة الآن إلى Google Drive</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: USERS ─── -->
+      <section class="screen" id="screen-users">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header">
+              <h3><span>👤</span> إدارة حسابات المستخدمين وصلاحيات الدخول</h3>
+              <button class="btn btn-primary" onclick="openUserModal()">+ مستخدم جديد</button>
+            </div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>الاسم</th><th>الصفة والصلاحية</th><th>الإجراءات</th></tr>
+                  </thead>
+                  <tbody id="usersTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: ACTIVITY LOG ─── -->
+      <section class="screen" id="screen-activitylog">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header">
+              <h3><span>🕵️</span> سجل العمليات والتدقيق الأمني المباشر</h3>
+              <button class="btn btn-secondary btn-sm" onclick="renderActivityLogTable()">🔄 تحديث السجل</button>
+            </div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>التاريخ والوقت</th><th>المستخدم</th><th>الصفة</th><th>العملية</th><th>التفاصيل</th></tr>
+                  </thead>
+                  <tbody id="activityLogTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: SETTINGS ─── -->
+      <section class="screen" id="screen-settings">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-header"><h3><span>⚙️</span> إعدادات النظام والمكتب</h3></div>
+            <div class="card-body">
+              <div class="grid2">
+                <div class="form-group"><label class="form-label">اسم المكتب / العلوة</label><input class="form-control" id="setStoreName"></div>
+                <div class="form-group"><label class="form-label">رقم الهاتف</label><input class="form-control" id="setStorePhone"></div>
+                <div class="form-group"><label class="form-label">اسم العملة المعتمدة</label><input class="form-control" id="setCurrency"></div>
+                <div class="form-group"><label class="form-label">سعر صرف 100 دولار (بالدينار العراقي)</label><input type="number" class="form-control is-num" id="setUsdRate" placeholder="153000"></div>
+                <div class="form-group"><label class="form-label">سقف الدين الافتراضي للزبائن الجدد</label><input type="number" class="form-control is-num" id="setDefCredit"></div>
+                <div class="form-group"><label class="form-label">حد التنبيه الافتراضي للمخزون المنخفض (كغم)</label><input type="number" class="form-control is-num" id="setLowStock"></div>
+              </div>
+              <button class="btn btn-primary" onclick="saveSettings()">💾 حفظ التغييرات</button>
+            </div>
+          </div>
+
+          <!-- Safe In-App Updater Section -->
+          <div class="card" style="margin-top:16px;">
+            <div class="card-header">
+              <h3><span>🔄</span> التحديث الداخلي الآمن للنظام (منظومة زمام)</h3>
+              <span class="zimam-pill">تأمين تلقائي للبيانات</span>
+            </div>
+            <div class="card-body">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);margin-bottom:14px;">
+                <div>
+                  <strong style="font-size:14px;display:block;">الإصدار الحالي المثبت: <span class="badge badge-sage" id="updaterCurrentVer">v2.0.0</span></strong>
+                  <span class="sub">يتم إجراء فحص سلامة ونسخ احتياطي كامل للبيانات قبل أي عملية ترقية</span>
+                </div>
+                <button class="btn btn-secondary" id="updaterCheckBtn" onclick="checkSystemUpdates()">
+                  <span>🔍</span> التحقق من وجود تحديثات
+                </button>
+              </div>
+
+              <div id="updaterResultBox" style="display:none;padding:14px;border:1px solid var(--border-light);border-radius:var(--r-sm);background:var(--bg-card);">
+                <!-- Injected via JavaScript -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══ TOAST CONTAINER & MODAL ROOT ═══ -->
+<div class="toast-wrap" id="toastCont"></div>
+<div id="modalRoot"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

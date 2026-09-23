@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>طباعة فاتورة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Roboto+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      margin: 3mm;
+      size: 80mm auto;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+      font-size: 11.5px;
+      color: #000;
+      background: #fff;
+      padding: 4mm 2mm;
+      width: 74mm;
+      margin: 0 auto;
+    }
+    .num {
+      font-family: 'Roboto Mono', monospace;
+      direction: ltr;
+      unicode-bidi: embed;
+      font-weight: 600;
+    }
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .header {
+      text-align: center;
+      border-bottom: 1px dashed #000;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .header h2 {
+      font-family: 'Cairo', sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 3px;
+    }
+    .header .sub {
+      font-size: 10.5px;
+      margin-bottom: 2px;
+    }
+    .meta-grid {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0;
+      font-size: 10.5px;
+    }
+    th {
+      border-bottom: 1px solid #000;
+      padding: 4px 2px;
+      text-align: right;
+      font-weight: 700;
+    }
+    td {
+      padding: 4px 2px;
+      border-bottom: 1px dotted #ccc;
+      vertical-align: middle;
+    }
+    .totals {
+      border-top: 1px dashed #000;
+      padding-top: 6px;
+      margin-top: 6px;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      margin-bottom: 3px;
+    }
+    .total-row.grand {
+      font-size: 13.5px;
+      font-weight: 800;
+      border-top: 1px solid #000;
+      padding-top: 4px;
+      margin-top: 4px;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 10px;
+      border-top: 1px dashed #000;
+      padding-top: 6px;
+    }
+    .no-print {
+      margin-top: 14px;
+      text-align: center;
+    }
+    .btn-print {
+      padding: 8px 16px;
+      background: #2C3E50;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { width: 100%; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h2 id="storeName">نظام إدارة العلوة</h2>
+  <div class="sub" id="storePhone"></div>
+  <div class="meta-grid" style="margin-top:6px;">
+    <span>فاتورة بيع: <strong class="num" id="invId">#-</strong></span>
+    <span class="num" id="invDate">--</span>
+  </div>
+  <div class="meta-grid">
+    <span>الزبون: <strong id="custName">--</strong></span>
+    <span id="driverInfo"></span>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>المادة</th>
+      <th>الكمية</th>
+      <th class="text-left">السعر</th>
+      <th class="text-left">الإجمالي</th>
+    </tr>
+  </thead>
+  <tbody id="linesBody">
+    <tr><td colspan="4" class="text-center">جاري تحميل الفاتورة...</td></tr>
+  </tbody>
+</table>
+
+<div class="totals">
+  <div class="total-row grand">
+    <span>المجموع الكلي:</span>
+    <span class="num" id="invTotal">0</span>
+  </div>
+  <div class="total-row">
+    <span>المبلغ الواصل (كاش):</span>
+    <span class="num" id="invPaid">0</span>
+  </div>
+  <div class="total-row" style="font-weight:700;">
+    <span>المتبقي بذمة الزبون:</span>
+    <span class="num" id="invRemain">0</span>
+  </div>
+</div>
+
+<div class="footer">
+  <p>شكراً لتعاملكم معنا</p>
+  <p style="margin-top:2px;">يرجى مراجعة الحساب والكميات قبل مغادرة المكتب</p>
+  <p style="margin-top:5px;font-size:9.5px;color:#555;">✨ نظام إدارة العلوة — ضمن منظومة زمام الذكية</p>
+</div>
+
+<div class="no-print" style="margin-top:14px;display:flex;gap:8px;justify-content:center;">
+  <button class="btn-print" onclick="window.print()">🖨️ طباعة الفاتورة الآن</button>
+  <button class="btn-print" style="background:#16a34a;color:#fff;" onclick="shareCurrentInvoiceWhatsApp()">💬 إرسال واتساب</button>
+</div>
+
+<script>
+  let currentInvoiceData = null;
+
+  function fmtNum(n) {
+    n = Math.round((Number(n) || 0) * 100) / 100;
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+
+  function shareCurrentInvoiceWhatsApp() {
+    if (!currentInvoiceData) return;
+    const { inv, cust, settings } = currentInvoiceData;
+    const lines = inv.lines || [];
+    const linesText = lines.map(l => `• ${l.item_name}: ${l.qty} ${l.unit} × ${fmtNum(l.price)} = ${fmtNum(l.total)} د.ع`).join('\n');
+    const storeName = settings.storeName || 'نظام إدارة العلوة';
+
+    const text = `🌿 *${storeName}*
+🧾 *فاتورة مبيعات رقم:* #${inv.id}
+📅 *التاريخ:* ${new Date(inv.date).toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+👤 *الزبون:* ${cust.name}
+${inv.driver_name ? `🚚 *السائق:* ${inv.driver_name}\n` : ''}-------------------------
+📦 *المواد والكميات:*
+${linesText || 'لا توجد تفاصيل'}
+-------------------------
+💰 *المجموع الكلي:* ${fmtNum(inv.total)} د.ع
+💵 *الواصل (كاش):* ${fmtNum(inv.paid)} د.ع
+⏳ *المتبقي بذمة الزبون:* ${fmtNum(inv.remaining)} د.ع
+-------------------------
+شكراً لتعاملكم معنا 🙏
+_ضمن منظومة زمام الذكية_`;
+
+    let phone = cust.phone || inv.driver_phone || '';
+    phone = phone.replace(/[^\d+]/g, '');
+    if (phone.startsWith('07')) phone = '964' + phone.substring(1);
+    else if (phone.startsWith('7')) phone = '964' + phone;
+
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  }
+
+  async function loadInvoice() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+
+    if (!id) {
+      document.body.innerHTML = '<div style="text-align:center;padding:20px;">لم يتم تحديد رقم الفاتورة</div>';
+      return;
+    }
+
+    try {
+      // Fetch settings & invoices
+      const [invoices, settings, customers] = await Promise.all([
+        fetch('/api/invoices').then(r => r.json()),
+        fetch('/api/settings').then(r => r.json()),
+        fetch('/api/customers').then(r => r.json())
+      ]);
+
+      const inv = invoices.find(x => String(x.id) === String(id));
+      if (!inv) {
+        document.body.innerHTML = '<div style="text-align:center;padding:20px;">الفاتورة غير موجودة أو تم إلغاؤها</div>';
+        return;
+      }
+
+      const cust = customers.find(c => c.id === inv.customer_id) || { name: 'زبون عام', phone: '' };
+      currentInvoiceData = { inv, cust, settings };
+
+      document.getElementById('storeName').textContent = settings.storeName || 'نظام إدارة العلوة';
+      if (settings.storePhone) document.getElementById('storePhone').textContent = 'هاتف: ' + settings.storePhone;
+      document.getElementById('invId').textContent = '#' + inv.id;
+      document.getElementById('invDate').textContent = new Date(inv.date).toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      document.getElementById('custName').textContent = cust.name;
+      if (inv.driver_name) document.getElementById('driverInfo').textContent = 'السائق: ' + inv.driver_name;
+
+      document.getElementById('invTotal').textContent = fmtNum(inv.total);
+      document.getElementById('invPaid').textContent = fmtNum(inv.paid);
+      document.getElementById('invRemain').textContent = fmtNum(inv.remaining);
+
+      const lines = inv.lines || [];
+      const tbody = document.getElementById('linesBody');
+      if (lines.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">لا توجد مواد</td></tr>';
+      } else {
+        tbody.innerHTML = lines.map(l => `
+          <tr>
+            <td><strong>${l.item_name}</strong></td>
+            <td class="num">${l.qty} ${l.unit}</td>
+            <td class="num text-left">${fmtNum(l.price)}</td>
+            <td class="num text-left"><strong>${fmtNum(l.total)}</strong></td>
+          </tr>
+        `).join('');
+      }
+
+      // Auto trigger print after short delay
+      setTimeout(() => {
+        window.print();
+      }, 400);
+
+    } catch (err) {
+      document.body.innerHTML = '<div style="text-align:center;padding:20px;color:red;">حدث خطأ أثناء تحميل الفاتورة: ' + err.message + '</div>';
+    }
+  }
+
+  loadInvoice();
+</script>
+</body>
+</html>

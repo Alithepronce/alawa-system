@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>طباعة كشف حساب</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Roboto+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      margin: 10mm;
+      size: A4 portrait;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+      font-size: 12.5px;
+      color: #1A202C;
+      background: #fff;
+      padding: 15px;
+      direction: rtl;
+    }
+    .num {
+      font-family: 'Roboto Mono', monospace;
+      direction: ltr;
+      unicode-bidi: embed;
+      font-weight: 600;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #2C3E50;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .header h1 {
+      font-family: 'Cairo', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      color: #2C3E50;
+    }
+    .meta-box {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th {
+      background: #EDF2F7;
+      color: #2D3748;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 700;
+      text-align: right;
+      padding: 8px 10px;
+      border-bottom: 2px solid #CBD5E0;
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #E2E8F0;
+      vertical-align: middle;
+    }
+    tr:nth-child(even) td {
+      background: #F8FAFC;
+    }
+    .balance-panel {
+      background: #2C3E50;
+      color: #fff;
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .balance-panel .val {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 22px;
+      color: #8BB5A0;
+    }
+    .no-print {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .btn-print {
+      padding: 10px 24px;
+      background: #2C3E50;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    @media print {
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1 id="storeName">نظام إدارة العلوة</h1>
+    <div id="storePhone" style="font-size:12px;color:#718096;margin-top:2px;"></div>
+  </div>
+  <div style="text-align:left;">
+    <h2 style="font-family:'Cairo',sans-serif;font-size:16px;">كشف حساب مالي تفصيلي</h2>
+    <div style="font-size:11px;color:#718096;">تاريخ الطباعة: <span class="num" id="printDate"></span></div>
+  </div>
+</div>
+
+<div class="meta-box">
+  <div>
+    <span>اسم الحساب: </span>
+    <strong id="partyName" style="font-size:15px;color:#2C3E50;">--</strong>
+  </div>
+  <div>
+    <span>النوع: </span>
+    <strong id="partyType">--</strong>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>التاريخ</th>
+      <th>البيان</th>
+      <th>المادة</th>
+      <th>الكمية</th>
+      <th style="text-align:left;">مدين (+)</th>
+      <th style="text-align:left;">دائن (-)</th>
+    </tr>
+  </thead>
+  <tbody id="ledgerBody">
+    <tr><td colspan="6" style="text-align:center;">جاري تحميل كشف الحساب...</td></tr>
+  </tbody>
+</table>
+
+<div class="balance-panel">
+  <span id="balanceLbl">الرصيد المالي الحالي:</span>
+  <span class="val" id="balanceVal">0</span>
+</div>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ طباعة كشف الحساب</button>
+</div>
+
+<script>
+  function fmtNum(n) {
+    n = Math.round((Number(n) || 0) * 100) / 100;
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+
+  async function loadLedger() {
+    const params = new URLSearchParams(location.search);
+    const type = params.get('type') || 'customer';
+    const id = params.get('id');
+
+    document.getElementById('printDate').textContent = new Date().toLocaleDateString('ar-EG', { dateStyle: 'medium' });
+
+    if (!id) {
+      document.body.innerHTML = '<div style="text-align:center;padding:20px;">لم يتم تحديد الحساب المطلوب</div>';
+      return;
+    }
+
+    try {
+      const [settings, data] = await Promise.all([
+        fetch('/api/settings').then(r => r.json()),
+        fetch(`/api/${type === 'customer' ? 'customers' : 'suppliers'}/${id}/ledger`).then(r => r.json())
+      ]);
+
+      document.getElementById('storeName').textContent = settings.storeName || 'نظام إدارة العلوة';
+      if (settings.storePhone) document.getElementById('storePhone').textContent = 'هاتف: ' + settings.storePhone;
+
+      const party = type === 'customer' ? data.customer : data.supplier;
+      document.getElementById('partyName').textContent = party ? party.name : 'غير محدد';
+      document.getElementById('partyType').textContent = type === 'customer' ? 'زبون' : 'مورد';
+
+      const rows = data.rows || [];
+      const tbody = document.getElementById('ledgerBody');
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;">لا توجد حركات مسجلة في هذا الكشف</td></tr>';
+      } else {
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${new Date(r.date).toLocaleDateString('ar-EG')}</td>
+            <td><strong>${r.desc}</strong></td>
+            <td>${r.material || '-'}</td>
+            <td>${r.qty || '-'}</td>
+            <td class="num" style="text-align:left;">${r.debit ? fmtNum(r.debit) : '-'}</td>
+            <td class="num" style="text-align:left;">${r.credit ? fmtNum(r.credit) : '-'}</td>
+          </tr>
+        `).join('');
+      }
+
+      const bal = data.balance || 0;
+      document.getElementById('balanceVal').textContent = `${fmtNum(Math.abs(bal))} ${settings.currency || 'د.ع'}`;
+      if (type === 'customer' && bal < 0) {
+        document.getElementById('balanceLbl').textContent = 'رصيد دائن للزبون (له بذمتنا):';
+      } else {
+        document.getElementById('balanceLbl').textContent = 'الرصيد المالي الحالي المستحق:';
+      }
+
+    } catch (err) {
+      document.body.innerHTML = '<div style="text-align:center;padding:20px;color:red;">حدث خطأ: ' + err.message + '</div>';
+    }
+  }
+
+  loadLedger();
+</script>
+</body>
+</html>
