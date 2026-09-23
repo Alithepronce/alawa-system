@@ -1,10 +1,7 @@
-# Alawa licensing service
+# License signing key storage
 
-1. Host this service behind HTTPS (for example, on a VPS behind Nginx).
-2. Run `npm run create-key` once. Keep `license-private.pem` only on the server.
-3. Replace `server/license-public-key.pem` in the desktop application with the generated `license-public.pem`, then rebuild the Windows app.
-4. Set a random `ADMIN_TOKEN` environment secret and start the service.
-5. Create a customer key: `POST /admin/licenses` with `Authorization: Bearer <ADMIN_TOKEN>` and `{ "expiresAt": "2027-01-01T00:00:00Z" }`.
-6. To move a customer to another computer, call `POST /admin/reset-device` with the same authorization and `{ "licenseKey": "..." }`.
+The desktop application now uses offline signed license files. The `server.js` service in this directory is retained for reference but is not required to activate customers.
 
-Never expose the private key, database, or admin token in the desktop package.
+Keep `license-private.pem` on the owner's trusted computer, encrypted at rest and backed up securely. It must never be committed to GitHub, included in the desktop package, or sent to customers. The matching public key is `server/license-public-key.pem` in the source tree and may be distributed.
+
+The owner can create licenses with `../license-manager/index.html`. Use the activation request file from the customer's app, this private key, and the matching public key. The manager verifies the pair before issuing a signed file. Do not run `npm run create-key` if `license-private.pem` already exists; replacing the key invalidates licenses issued with the old one.

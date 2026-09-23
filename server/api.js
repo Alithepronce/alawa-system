@@ -17,6 +17,7 @@ const license = require('./handlers/license');
 // Route table: [method, path pattern with :param placeholders, handler]
 const routes = [
   ['GET',  '/api/license/status', () => license.getStatus()],
+  ['GET',  '/api/license/request', () => license.getActivationRequest()],
   ['POST', '/api/license/activate', (ctx) => license.activate(ctx)],
   ['POST', '/api/license/refresh', () => license.refresh()],
   ['POST', '/api/login', (ctx) => authH.handleLogin(ctx)],

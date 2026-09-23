@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // No business API is available until a signed, device-bound licence exists.
-  const licenseRoutes = new Set(['/api/license/status', '/api/license/activate', '/api/license/refresh']);
+  const licenseRoutes = new Set(['/api/license/status', '/api/license/request', '/api/license/activate', '/api/license/refresh']);
   if (!licenseRoutes.has(pathname) && !license.status().valid) {
     return sendJSON(res, 402, { error: 'يلزم تفعيل ترخيص النظام لهذا الجهاز', license: license.status() });
   }

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>إصدار ترخيص العلوة دون اتصال</title>
+  <link rel="stylesheet" href="manager.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <span class="eyebrow">أداة إدارية محلية — لا تحتاج إلى إنترنت</span>
+      <h1>إصدار ملف ترخيص</h1>
+      <p>حمّل طلب التفعيل الذي أرسله العميل، وقّعه بمفتاحك الخاص، ثم أرسل ملف الترخيص الناتج إليه.</p>
+    </header>
+
+    <section class="security-note" aria-label="تنبيه أمني">
+      <strong>حافظ على سرية المفتاح الخاص</strong>
+      <p>التوقيع يتم داخل هذا المتصفح فقط. لا ترفع ملف المفتاح الخاص ولا ترسله للعميل. استخدم جهازاً موثوقاً، واحتفظ بنسخة احتياطية مشفّرة منه.</p>
+    </section>
+
+    <form id="issueForm" novalidate>
+      <section class="card">
+        <div class="step">١</div>
+        <div class="card-content">
+          <h2>طلب العميل</h2>
+          <p class="hint">يصدر البرنامج ملف طلب يحتوي بصمة الجهاز فقط. اطلب من العميل إرسال الملف إليك.</p>
+          <label for="requestFile">ملف طلب التفعيل <span class="required">مطلوب</span></label>
+          <input id="requestFile" type="file" accept=".json,application/json" required aria-describedby="requestHint">
+          <small id="requestHint">عادةً اسمه يبدأ بـ <code>alawa-activation-</code></small>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="step">٢</div>
+        <div class="card-content">
+          <h2>مفاتيح التوقيع</h2>
+          <p class="hint">اختر المفتاح الخاص الموجود عندك، ومعه المفتاح العام المضمّن في نسخة البرنامج. الأداة تتحقق أنهما زوج متطابق قبل الإصدار.</p>
+          <label for="privateKeyFile">المفتاح الخاص <span class="required">مطلوب</span></label>
+          <input id="privateKeyFile" type="file" accept=".pem,text/plain" required>
+          <label for="publicKeyFile">المفتاح العام للتطبيق <span class="required">مطلوب</span></label>
+          <input id="publicKeyFile" type="file" accept=".pem,text/plain" required>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="step">٣</div>
+        <div class="card-content">
+          <h2>مدة الترخيص</h2>
+          <p class="hint">اترك التاريخ فارغاً لإصدار ترخيص دائم لهذا الجهاز. الترخيص الدائم لا يمكن إلغاؤه عن بُعد.</p>
+          <label for="expiresAt">تاريخ الانتهاء — اختياري</label>
+          <input id="expiresAt" type="date">
+        </div>
+      </section>
+
+      <div id="message" class="message" role="status" aria-live="polite" tabindex="-1"></div>
+      <button id="issueButton" type="submit">إنشاء ملف الترخيص وتنزيله</button>
+      <p class="footnote">لا يُرسل هذا الملف أي بيانات إلى الإنترنت ولا يحفظ المفتاح في المتصفح بعد إغلاق الصفحة.</p>
+    </form>
+  </main>
+  <script src="manager.js" defer></script>
+</body>
+</html>

@@ -96,24 +96,53 @@ async function ensureLicense() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay" style="display:flex;align-items:center;justify-content:center;background:var(--bg-page);">
-      <div class="modal-box" style="max-width:460px;width:92%;">
-        <div class="modal-header"><h3>🔐 تفعيل نظام إدارة العلوة</h3></div>
-        <div class="modal-body" style="padding:22px;"><p class="sub">هذا الجهاز غير مفعّل. أدخل عنوان خادم التراخيص ومفتاح العميل الذي أصدرته الإدارة.</p>
-          <div class="form-group"><label class="form-label">عنوان خادم الترخيص</label><input id="licenseServerUrl" class="form-control" value="${esc(license.serverUrl || '')}" placeholder="https://licenses.example.com"></div>
-          <div class="form-group"><label class="form-label">مفتاح الترخيص</label><input id="licenseKey" class="form-control" placeholder="ALAWA-XXXX-XXXX-XXXX"></div>
+      <div class="modal-box" style="max-width:520px;width:92%;" role="dialog" aria-modal="true" aria-labelledby="licenseTitle">
+        <div class="modal-header"><h3 id="licenseTitle">تفعيل نظام إدارة العلوة</h3></div>
+        <div class="modal-body" style="padding:22px;">
+          <p class="sub">التفعيل يعمل دون اتصال بالإنترنت. احفظ طلب هذا الجهاز وأرسله للمسؤول، ثم اختر ملف الترخيص الذي يصدره لك.</p>
+          ${license.reason === 'DEVICE_MISMATCH' ? '<p class="login-error" style="display:block;" role="alert">ملف الترخيص الموجود مربوط بجهاز آخر. اطلب إصدار ترخيص جديد لهذا الجهاز.</p>' : ''}
+          <div class="form-group">
+            <button id="licenseRequestButton" class="btn btn-secondary" type="button" style="width:100%;" onclick="downloadLicenseRequest()">حفظ طلب التفعيل لهذا الجهاز</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="licenseFile">ملف الترخيص الصادر من المسؤول</label>
+            <input id="licenseFile" class="form-control" type="file" accept=".json,application/json" aria-describedby="licenseFileHint licenseError">
+            <small id="licenseFileHint" class="sub">اختر ملف JSON باسم ينتهي بـ <code>.alawa-license.json</code></small>
+          </div>
           <div id="licenseError" class="login-error" role="alert" aria-live="assertive"></div>
-          <button class="btn btn-primary" style="width:100%;" onclick="activateLicenseUI()">تفعيل هذا الجهاز</button>
+          <button id="licenseActivateButton" class="btn btn-primary" type="button" style="width:100%;" onclick="activateLicenseUI()">تفعيل هذا الجهاز</button>
         </div>
       </div>
     </div>`;
   return false;
 }
-async function activateLicenseUI() {
-  const error = document.getElementById('licenseError'); error.style.display = 'none';
+async function downloadLicenseRequest() {
+  const button = document.getElementById('licenseRequestButton');
+  const error = document.getElementById('licenseError');
+  button.disabled = true; error.textContent = ''; error.style.display = 'none';
   try {
-    await api('POST', '/license/activate', { serverUrl: document.getElementById('licenseServerUrl').value.trim(), licenseKey: document.getElementById('licenseKey').value.trim() });
+    const response = await api('GET', '/license/request');
+    const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = `alawa-activation-${response.data.requestId}.json`;
+    document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('تم حفظ طلب التفعيل. أرسله للمسؤول لإصدار ملف الترخيص.', 'ok');
+  } catch (e) { error.textContent = e.message || 'تعذر إنشاء طلب التفعيل'; error.style.display = 'block'; }
+  finally { if (button.isConnected) button.disabled = false; }
+}
+async function activateLicenseUI() {
+  const error = document.getElementById('licenseError'); const button = document.getElementById('licenseActivateButton');
+  const file = document.getElementById('licenseFile').files?.[0];
+  error.textContent = ''; error.style.display = 'none';
+  if (!file) { error.textContent = 'اختر ملف الترخيص أولاً.'; error.style.display = 'block'; return; }
+  if (file.size > 65536) { error.textContent = 'حجم ملف الترخيص أكبر من الحد المسموح.'; error.style.display = 'block'; return; }
+  button.disabled = true;
+  try {
+    const license = JSON.parse(await file.text());
+    await api('POST', '/license/activate', { license });
     document.getElementById('modalRoot').innerHTML = ''; document.getElementById('loginScreen').style.display = 'flex'; toast('تم تفعيل هذا الجهاز بنجاح', 'ok');
-  } catch (e) { error.textContent = e.message; error.style.display = 'block'; }
+  } catch (e) { error.textContent = e instanceof SyntaxError ? 'ملف الترخيص ليس بصيغة JSON صحيحة.' : (e.message || 'تعذر تفعيل هذا الجهاز.'); error.style.display = 'block'; }
+  finally { if (button.isConnected) button.disabled = false; }
 }
 
 /* Custom Accessible Confirmation Modal */
