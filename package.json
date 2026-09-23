@@ -2,24 +2,25 @@
   "name": "alawa-management-system",
   "version": "2.0.0",
   "description": "نظام إدارة العلوة — نظام مالي ومحاسبي متكامل لسطح المكتب (Node.js + SQLite)",
+  "author": "Alawa Management System",
   "main": "main.js",
   "scripts": {
     "start": "node server/server.js",
     "test": "node test_system.js",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir && node scripts/stamp_exe.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "devDependencies": {
-    "electron": "^34.0.0",
+    "electron": "^31.7.7",
     "electron-builder": "^24.0.0"
   },
   "build": {
     "appId": "com.alawa.management",
-    "productName": "نظام إدارة العلوة",
+    "productName": "AlawaSystem",
     "copyright": "© 2026 Alawa Management System",
     "directories": {
       "output": "dist"
@@ -38,6 +39,8 @@
       }
     ],
     "win": {
+      "executableName": "alawa-system",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -52,6 +55,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "shortcutName": "نظام إدارة العلوة",
       "installerLanguages": [
         "ar"
       ],

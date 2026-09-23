@@ -57,8 +57,18 @@ function startBackendServer(onReady) {
     const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
     const serverScript = path.join(__dirname, 'server', 'server.js');
 
+    // Detect host node runtime (Node 22+ with native node:sqlite) or fallback to electron runtime
+    let runtimeBinary = process.execPath;
+    try {
+      const { execSync } = require('node:child_process');
+      execSync('node -v', { stdio: 'ignore' });
+      runtimeBinary = 'node';
+    } catch (_) {
+      runtimeBinary = process.execPath;
+    }
+
     // Spawn server process
-    serverProc = spawn(process.execPath, [serverScript], {
+    serverProc = spawn(runtimeBinary, [serverScript], {
       env: { ...process.env, PORT: String(PORT), ELECTRON_RUN_AS_NODE: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     });
