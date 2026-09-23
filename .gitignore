@@ -22,6 +22,10 @@ data/.license*
 data/server.log
 .license*
 
+# Licensing service secrets — never commit or distribute with the desktop app
+license-server/license-private.pem
+license-server/licenses.db*
+
 # Screenshots in root if temporary
 *_view.png
 backup_screen_active.png

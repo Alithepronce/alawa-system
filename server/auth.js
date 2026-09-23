@@ -35,7 +35,7 @@ function createSession(userId) {
 function getSessionUser(token) {
   if (!token) return null;
   const row = db.prepare(`
-    SELECT s.token, s.expires_at, u.id, u.name, u.role
+    SELECT s.token, s.expires_at, u.id, u.name, u.role, u.must_change_password
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
   `).get(token);
@@ -44,7 +44,7 @@ function getSessionUser(token) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return null;
   }
-  return { id: row.id, name: row.name, role: row.role, token };
+  return { id: row.id, name: row.name, role: row.role, must_change_password: row.must_change_password, token };
 }
 
 function destroySession(token) {

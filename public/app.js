@@ -6,6 +6,7 @@
 ========================================================= */
 
 let currentUser = null;
+let updateCheckScheduled = false;
 let state = { customers: [], items: [], suppliers: [], settings: {} };
 
 /* =========================================================
@@ -13,11 +14,15 @@ let state = { customers: [], items: [], suppliers: [], settings: {} };
 ========================================================= */
 async function api(method, path, body) {
   const opts = { method, credentials: 'include', headers: {} };
+  const activeButton = body !== undefined && document.activeElement?.tagName === 'BUTTON' && !document.activeElement.disabled ? document.activeElement : null;
+  if (activeButton) activeButton.disabled = true;
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch('/api' + path, opts);
+  let res;
+  try { res = await fetch('/api' + path, opts); }
+  catch (error) { if (activeButton?.isConnected) activeButton.disabled = false; throw error; }
   let data;
   try {
     data = await res.json();
@@ -25,11 +30,13 @@ async function api(method, path, body) {
     data = {};
   }
   if (!res.ok) {
+    if (activeButton?.isConnected) activeButton.disabled = false;
     const err = new Error(data.error || 'حدث خطأ غير متوقع');
     err.status = res.status;
     err.data = data;
     throw err;
   }
+  if (activeButton?.isConnected) activeButton.disabled = false;
   return data;
 }
 
@@ -76,8 +83,37 @@ function toast(msg, type = 'info') {
 }
 
 function closeModal() {
+  if (currentUser?.mustChangePassword && document.getElementById('modalRoot')?.querySelector('.modal-box')) return;
   const root = document.getElementById('modalRoot');
+  if (typeof window.__confirmResolve === 'function') { const resolve = window.__confirmResolve; window.__confirmResolve = null; resolve(false); }
   if (root) root.innerHTML = '';
+}
+
+async function ensureLicense() {
+  let license;
+  try { license = await api('GET', '/license/status'); } catch (_) { return false; }
+  if (license.valid) return true;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay" style="display:flex;align-items:center;justify-content:center;background:var(--bg-page);">
+      <div class="modal-box" style="max-width:460px;width:92%;">
+        <div class="modal-header"><h3>🔐 تفعيل نظام إدارة العلوة</h3></div>
+        <div class="modal-body" style="padding:22px;"><p class="sub">هذا الجهاز غير مفعّل. أدخل عنوان خادم التراخيص ومفتاح العميل الذي أصدرته الإدارة.</p>
+          <div class="form-group"><label class="form-label">عنوان خادم الترخيص</label><input id="licenseServerUrl" class="form-control" value="${esc(license.serverUrl || '')}" placeholder="https://licenses.example.com"></div>
+          <div class="form-group"><label class="form-label">مفتاح الترخيص</label><input id="licenseKey" class="form-control" placeholder="ALAWA-XXXX-XXXX-XXXX"></div>
+          <div id="licenseError" class="login-error" role="alert" aria-live="assertive"></div>
+          <button class="btn btn-primary" style="width:100%;" onclick="activateLicenseUI()">تفعيل هذا الجهاز</button>
+        </div>
+      </div>
+    </div>`;
+  return false;
+}
+async function activateLicenseUI() {
+  const error = document.getElementById('licenseError'); error.style.display = 'none';
+  try {
+    await api('POST', '/license/activate', { serverUrl: document.getElementById('licenseServerUrl').value.trim(), licenseKey: document.getElementById('licenseKey').value.trim() });
+    document.getElementById('modalRoot').innerHTML = ''; document.getElementById('loginScreen').style.display = 'flex'; toast('تم تفعيل هذا الجهاز بنجاح', 'ok');
+  } catch (e) { error.textContent = e.message; error.style.display = 'block'; }
 }
 
 /* Custom Accessible Confirmation Modal */
@@ -85,19 +121,19 @@ function confirmDialog(title, message, confirmBtnText = 'نعم، تأكيد', i
   return new Promise((resolve) => {
     const root = document.getElementById('modalRoot');
     root.innerHTML = `
-      <div class="modal-overlay" onclick="if(event.target===this){closeModal(); resolve(false);}">
+      <div class="modal-overlay" onclick="if(event.target===this){closeModal();}">
         <div class="modal-box" style="max-width:420px;">
           <div class="modal-header">
             <h3>${esc(title)}</h3>
-            <button class="modal-close" onclick="closeModal(); window.__confirmResolve(false);">✕</button>
+            <button class="modal-close" onclick="closeModal();">✕</button>
           </div>
           <div class="modal-body" style="padding:24px 20px;text-align:center;">
             <div style="font-size:36px;margin-bottom:12px;">${isDanger ? '⚠️' : '❓'}</div>
             <p style="font-size:14px;color:var(--text-body);line-height:1.6;">${esc(message)}</p>
           </div>
           <div class="modal-footer" style="justify-content:center;gap:12px;">
-            <button class="btn btn-secondary" onclick="closeModal(); window.__confirmResolve(false);">إلغاء</button>
-            <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" onclick="closeModal(); window.__confirmResolve(true);">${esc(confirmBtnText)}</button>
+            <button class="btn btn-secondary" onclick="closeModal();">إلغاء</button>
+            <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" onclick="const r=window.__confirmResolve;window.__confirmResolve=null;document.getElementById('modalRoot').innerHTML='';if(r)r(true);">${esc(confirmBtnText)}</button>
           </div>
         </div>
       </div>
@@ -156,13 +192,36 @@ async function afterLogin() {
   applyRolePermissions();
   await loadAllData();
   showScreen('dashboard');
+  if (currentUser.mustChangePassword) showMandatoryPasswordChange();
+  if (window.electronAPI?.isElectron && !updateCheckScheduled) {
+    updateCheckScheduled = true;
+    setTimeout(() => window.electronAPI.checkForUpdates().catch(() => {}), 12000);
+  }
+}
+
+function showMandatoryPasswordChange() {
+  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay"><div class="modal-box" style="max-width:440px"><div class="modal-header"><h3>تغيير رمز الدخول مطلوب</h3></div><div class="modal-body"><p class="sub">هذا هو رمز الدخول الافتراضي. عيّن رمزاً جديداً قبل استخدام النظام.</p><div class="form-group"><label class="form-label">الرمز الحالي</label><input id="currentPassword" type="password" class="form-control" autocomplete="current-password"></div><div class="form-group"><label class="form-label">الرمز الجديد (6 أحرف/أرقام على الأقل)</label><input id="newPassword" type="password" class="form-control" autocomplete="new-password"></div><div id="passwordChangeError" role="alert" aria-live="assertive" class="login-error"></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="saveMandatoryPasswordChange()">حفظ الرمز الجديد</button></div></div></div>`;
+}
+async function saveMandatoryPasswordChange() {
+  const error = document.getElementById('passwordChangeError');
+  try {
+    await api('POST', '/me/password', { currentPassword: document.getElementById('currentPassword').value, newPassword: document.getElementById('newPassword').value });
+    currentUser.mustChangePassword = false;
+    closeModal(); toast('تم تغيير رمز الدخول بنجاح', 'ok');
+  } catch (e) { error.textContent = e.message; error.style.display = 'block'; }
 }
 
 function applyRolePermissions() {
   const isOwner = currentUser && currentUser.role === 'المالك';
+  const isWarehouse = currentUser && currentUser.role === 'أمين مخزن';
   document.querySelectorAll('.owner-only').forEach(el => {
     el.style.display = isOwner ? '' : 'none';
   });
+  document.querySelectorAll('.accountant-owner-only').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('.navbtn[data-scr="suppliers"]').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-inventory table thead th:nth-child(4), #screen-inventory table thead th:nth-child(5), #screen-inventory table thead th:nth-child(6)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-suppliers table thead th:nth-child(3)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-suppliers .card-header button').forEach(el => { el.style.display = ''; });
 }
 
 async function loadAllData() {
@@ -318,7 +377,8 @@ function refreshDashboard() {
 /* =========================================================
    POS (POINT OF SALE)
 ========================================================= */
-let posInvoice = { customerId: null, lines: [] };
+const newInvoiceRequestId = () => crypto.randomUUID();
+let posInvoice = { customerId: null, lines: [], requestId: newInvoiceRequestId() };
 let customerLastPricesMap = {};
 let heldInvoices = JSON.parse(localStorage.getItem('alawa_held_invoices') || '[]');
 
@@ -685,6 +745,7 @@ function holdCurrentInvoice() {
 
   const item = {
     id: Date.now(),
+    requestId: posInvoice.requestId,
     customerId: posInvoice.customerId,
     customerName: cName,
     lines: JSON.parse(JSON.stringify(posInvoice.lines)),
@@ -749,6 +810,7 @@ async function resumeHeldInvoice(id) {
 
   posInvoice.customerId = item.customerId;
   posInvoice.lines = JSON.parse(JSON.stringify(item.lines));
+  posInvoice.requestId = item.requestId || newInvoiceRequestId();
   document.getElementById('posPaid').value = item.paid || '';
   document.getElementById('posDueDate').value = item.dueDate || todayStr();
   document.getElementById('posDriverName').value = item.driverName || '';
@@ -773,7 +835,7 @@ function discardHeldInvoice(id) {
 }
 
 function clearPOS() {
-  posInvoice = { customerId: null, lines: [] };
+  posInvoice = { customerId: null, lines: [], requestId: newInvoiceRequestId() };
   customerLastPricesMap = {};
   document.getElementById('posPaid').value = '';
   document.getElementById('posDriverName').value = '';
@@ -783,7 +845,9 @@ function clearPOS() {
   posRenderLines();
 }
 
+let invoiceSaveInProgress = false;
 async function saveInvoice() {
+  if (invoiceSaveInProgress) return;
   if (!posInvoice.customerId) {
     toast('يرجى اختيار الزبون أولاً (F3)', 'err');
     return;
@@ -794,6 +858,7 @@ async function saveInvoice() {
   }
   const paid = parseFloat(document.getElementById('posPaid').value) || 0;
   const body = {
+    requestId: posInvoice.requestId,
     customerId: posInvoice.customerId,
     lines: posInvoice.lines.map(l => ({ itemId: l.itemId, qty: l.qty, unit: l.unit, priceOverride: l.priceOverride })),
     paid,
@@ -803,6 +868,7 @@ async function saveInvoice() {
     overridePin: document.getElementById('posOverridePin').value
   };
 
+  invoiceSaveInProgress = true;
   try {
     const res = await api('POST', '/invoices', body);
     const invoiceId = res.id;
@@ -822,6 +888,8 @@ async function saveInvoice() {
     }
   } catch (e) {
     toast(e.message, 'err');
+  } finally {
+    invoiceSaveInProgress = false;
   }
 }
 
@@ -1089,14 +1157,11 @@ function renderInventoryTable() {
             ${fmtNum(i.stock_kg)}
           </span>
         </td>
-        <td class="num">${fmtNum(i.price_wholesale)}</td>
-        <td class="num">${fmtNum(i.price_office)}</td>
-        <td class="num">${fmtNum(i.price_normal)}</td>
+        ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">${fmtNum(i.price_wholesale)}</td><td class="num">${fmtNum(i.price_office)}</td><td class="num">${fmtNum(i.price_normal)}</td>`}
         <td class="num">${esc(i.barcode) || '<span style="color:var(--text-muted);">-</span>'}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm btn-secondary" onclick="openAdjustModal(${i.id})">تسوية مخزون</button>
-          <button class="btn btn-sm btn-secondary" onclick="openItemModal(${i.id})">تعديل</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteItem(${i.id})">حذف</button>
+          ${currentUser?.role === 'أمين مخزن' ? '' : `<button class="btn btn-sm btn-secondary" onclick="openItemModal(${i.id})">تعديل</button><button class="btn btn-sm btn-danger" onclick="deleteItem(${i.id})">حذف</button>`}
         </td>
       </tr>
     `;
@@ -1119,12 +1184,12 @@ function openItemModal(id) {
             <div class="form-group"><label class="form-label">المخزون الأولي (كغم)</label><input type="number" class="form-control is-num" id="iStock" value="${it ? it.stock_kg : 0}" ${it ? 'disabled title="لتعديل المخزون استخدم زر تسوية المخزون"' : ''}></div>
           </div>
           <div class="form-group"><label class="form-label">الباركود (Barcode) — اختياري</label><input class="form-control is-num" id="iBarcode" value="${it ? esc(it.barcode || '') : ''}" placeholder="امسح الباركود بجهاز القارئ"></div>
-          ${!it ? `<div class="form-group"><label class="form-label">تكلفة الكيلو الافتتاحية</label><input type="number" class="form-control is-num" id="iOpenCost" value="0"></div>` : ''}
-          <div class="grid3">
+          ${!it && currentUser?.role !== 'أمين مخزن' ? `<div class="form-group"><label class="form-label">تكلفة الكيلو الافتتاحية</label><input type="number" class="form-control is-num" id="iOpenCost" value="0"></div>` : ''}
+          ${currentUser?.role === 'أمين مخزن' ? '' : `<div class="grid3">
             <div class="form-group"><label class="form-label">سعر الجملة</label><input type="number" class="form-control is-num" id="pWholesale" value="${it ? it.price_wholesale : 0}"></div>
             <div class="form-group"><label class="form-label">سعر المكاتب</label><input type="number" class="form-control is-num" id="pOffice" value="${it ? it.price_office : 0}"></div>
             <div class="form-group"><label class="form-label">سعر العادي</label><input type="number" class="form-control is-num" id="pNormal" value="${it ? it.price_normal : 0}"></div>
-          </div>
+          </div>`}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -1140,13 +1205,13 @@ async function saveItem(id) {
     name: document.getElementById('iName').value.trim(),
     bagWeight: document.getElementById('iBagWeight').value,
     barcode: document.getElementById('iBarcode').value.trim() || null,
-    priceWholesale: document.getElementById('pWholesale').value,
-    priceOffice: document.getElementById('pOffice').value,
-    priceNormal: document.getElementById('pNormal').value
+    priceWholesale: document.getElementById('pWholesale')?.value ?? 0,
+    priceOffice: document.getElementById('pOffice')?.value ?? 0,
+    priceNormal: document.getElementById('pNormal')?.value ?? 0
   };
   if (!id) {
     body.stockKg = document.getElementById('iStock').value;
-    body.openingCost = document.getElementById('iOpenCost').value;
+    body.openingCost = document.getElementById('iOpenCost')?.value ?? 0;
   }
 
   try {
@@ -1241,16 +1306,13 @@ function renderSuppliersScreen() {
     <tr>
       <td><strong>${esc(s.name)}</strong></td>
       <td class="num">${esc(s.phone) || '-'}</td>
-      <td class="num">
+      ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">
         <span class="badge ${s.balance > 0 ? 'badge-danger' : 'badge-sage'}">
           ${fmtNum(s.balance)}
         </span>
-      </td>
+      </td>`}
       <td style="white-space:nowrap;">
-        <button class="btn btn-sm btn-secondary" onclick="openLedgerFor('supplier', ${s.id})">كشف حساب</button>
-        <button class="btn btn-sm btn-success" onclick="openSupplierPaymentModal(${s.id})">تسديد دفعة</button>
-        <button class="btn btn-sm btn-secondary" onclick="openSupplierModal(${s.id})">تعديل</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteSupplier(${s.id})">حذف</button>
+        ${currentUser?.role === 'أمين مخزن' ? `<button class="btn btn-sm btn-secondary" onclick="openSupplierReturnModal(${s.id})">مرتجع مخزن</button>` : `<button class="btn btn-sm btn-secondary" onclick="openLedgerFor('supplier', ${s.id})">كشف حساب</button><button class="btn btn-sm btn-success" onclick="openSupplierPaymentModal(${s.id})">تسديد دفعة</button><button class="btn btn-sm btn-secondary" onclick="openSupplierModal(${s.id})">تعديل</button><button class="btn btn-sm btn-danger" onclick="deleteSupplier(${s.id})">حذف</button>`}
       </td>
     </tr>
   `).join('');
@@ -1268,10 +1330,7 @@ function openSupplierModal(id) {
         <div class="modal-body">
           <div class="form-group"><label class="form-label">اسم المورد *</label><input class="form-control" id="sName" value="${s ? esc(s.name) : ''}"></div>
           <div class="form-group"><label class="form-label">رقم الهاتف</label><input class="form-control is-num" id="sPhone" value="${s ? esc(s.phone) : ''}"></div>
-          <div class="grid2">
-            <div class="form-group"><label class="form-label">رصيد دائن (له بذمتنا)</label><input type="number" class="form-control is-num" id="sBalance" value="${s ? s.balance : 0}"></div>
-            <div class="form-group"><label class="form-label">رصيد مدين (لنا عنده)</label><input type="number" class="form-control is-num" id="sCredit" value="${s ? s.credit_from_supplier : 0}"></div>
-          </div>
+          ${s ? '<p class="sub">الأرصدة تتغير من خلال فواتير الشراء والتسديد والمرتجعات، ولا يمكن تعديلها يدوياً.</p>' : '<div class="form-group"><label class="form-label">الرصيد الافتتاحي (اختياري)</label><input type="number" class="form-control is-num" id="sOpeningBalance" value="0"></div>'}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -1286,8 +1345,7 @@ async function saveSupplier(id) {
   const body = {
     name: document.getElementById('sName').value.trim(),
     phone: document.getElementById('sPhone').value.trim(),
-    balance: document.getElementById('sBalance').value,
-    creditFromSupplier: document.getElementById('sCredit').value
+    openingBalance: id ? 0 : document.getElementById('sOpeningBalance').value
   };
   try {
     if (id) await api('PUT', `/suppliers/${id}`, body);
@@ -1600,8 +1658,8 @@ async function renderWeeklyReport() {
   document.getElementById('weeklyStatsRow').innerHTML = `
     <div class="stat-card"><div class="stat-label">المبيعات الإجمالية</div><div class="stat-value">${fmtNum(r.totalSales)}</div></div>
     <div class="stat-card terra"><div class="stat-label">البيع بالآجل</div><div class="stat-value">${fmtNum(r.creditSales)}</div></div>
-    <div class="stat-card info"><div class="stat-label">المقبوضات النقدية</div><div class="stat-value">${fmtNum(r.totalCashIn)}</div></div>
-    <div class="stat-card danger"><div class="stat-label">المصاريف التشغيلية</div><div class="stat-value">${fmtNum(r.manualExpense)}</div></div>
+    <div class="stat-card info"><div class="stat-label">إجمالي المقبوضات الفعلية</div><div class="stat-value">${fmtNum(r.totalCashIn)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">صافي حركة الصندوق بعد كل المدفوعات</div><div class="stat-value">${fmtNum(r.netCashFlow)}</div></div>
   `;
 
   const body = document.getElementById('weeklyCustomersBody');
@@ -1891,21 +1949,21 @@ async function createAutoBackupNow() {
   }
 }
 
-async function downloadSQLBackup() {
+async function downloadBackup() {
   try {
-    const { sql, filename } = await api('GET', '/backup/export');
-    const blob = new Blob([sql], { type: 'application/sql' });
+    const { backup, filename } = await api('GET', '/backup/export');
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     a.click();
-    toast('تم تنزيل النسخة الاحتياطية SQL بنجاح', 'ok');
+    toast('تم تنزيل النسخة الاحتياطية بنجاح', 'ok');
   } catch (e) {
     toast(e.message, 'err');
   }
 }
 
-async function handleSqlImport(ev) {
+async function handleBackupImport(ev) {
   const file = ev.target.files[0];
   if (!file) return;
   const ok = await confirmDialog(
@@ -1921,7 +1979,8 @@ async function handleSqlImport(ev) {
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
-      await api('POST', '/backup/import', { sql: e.target.result });
+      const backup = JSON.parse(e.target.result);
+      const result = await api('POST', '/backup/import', { backup });
       toast('تم استيراد قاعدة البيانات بنجاح — جارٍ إعادة تشغيل الواجهة', 'ok');
       await loadAllData();
       setTimeout(() => location.reload(), 1200);
@@ -1982,13 +2041,14 @@ async function connectGoogleDrive() {
 async function uploadBackupToDrive() {
   if (!gdriveAccessToken) { toast('اربط حساب Google Drive أولاً', 'err'); return; }
   try {
-    const { sql, filename } = await api('GET', '/backup/export');
-    const metadata = { name: filename, mimeType: 'application/sql' };
+    const { backup, filename } = await api('GET', '/backup/export');
+    const backupText = JSON.stringify(backup, null, 2);
+    const metadata = { name: filename, mimeType: 'application/json' };
     const boundary = '314159265358979323846';
     const delimiter = '\r\n--' + boundary + '\r\n';
     const closeDelim = '\r\n--' + boundary + '--';
     const body = delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) +
-      delimiter + 'Content-Type: application/sql\r\n\r\n' + sql + closeDelim;
+      delimiter + 'Content-Type: application/json\r\n\r\n' + backupText + closeDelim;
 
     const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
@@ -2010,20 +2070,24 @@ async function uploadBackupToDrive() {
 ========================================================= */
 async function renderUsersScreen() {
   const users = await api('GET', '/users');
+  currentUsers = users;
   const body = document.getElementById('usersTableBody');
   body.innerHTML = users.length ? users.map(u => `
     <tr>
       <td><strong>${esc(u.name)}</strong></td>
       <td><span class="badge badge-slate">${esc(u.role)}</span></td>
       <td>
-        <button class="btn btn-sm btn-secondary" onclick='openUserModal(${u.id},"${esc(u.name)}","${u.role}")'>تعديل</button>
+        <button class="btn btn-sm btn-secondary" onclick="openUserModal(${u.id})">تعديل</button>
         <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">حذف</button>
       </td>
     </tr>
   `).join('') : '<tr><td colspan="3"><div class="empty-state">لا يوجد مستخدمون مسجلون</div></td></tr>';
 }
 
-function openUserModal(id, name, role) {
+let currentUsers = [];
+function openUserModal(id) {
+  const user = id ? currentUsers.find(u => u.id === id) : null;
+  const name = user?.name || '', role = user?.role || '';
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay">
       <div class="modal-box">
@@ -2308,8 +2372,26 @@ function openShortcutsModal() {
 }
 
 /* =========================================================
-   SAFE IN-APP UPDATER (ZIMAM ECOSYSTEM)
+   GitHub Releases auto-updater (Electron NSIS)
 ========================================================= */
+function renderUpdateStatus(status) {
+  const box = document.getElementById('updaterResultBox');
+  if (!box || !status) return;
+  box.style.display = 'block';
+  const version = esc(status.version || '');
+  if (status.state === 'checking') box.innerHTML = '<div role="status" aria-live="polite">جارٍ التحقق من إصدارات GitHub…</div>';
+  else if (status.state === 'available') { box.innerHTML = `<div style="font-weight:700">يتوفر إصدار ${version}</div><p class="sub">يمكن تنزيله الآن، وسيبقى الإصدار الحالي قيد الاستخدام حتى اكتمال التنزيل والنسخة الاحتياطية.</p><button class="btn btn-primary" onclick="downloadSystemUpdate()">تنزيل التحديث</button>`; toast(`يتوفر تحديث جديد ${version} — افتح شاشة الإعدادات لتنزيله`, 'info'); }
+  else if (status.state === 'progress') box.innerHTML = `<div role="status" aria-live="polite">جارٍ تنزيل التحديث: ${Math.max(0,Math.min(100,Number(status.percent)||0))}%</div><progress max="100" value="${Math.max(0,Math.min(100,Number(status.percent)||0))}" style="width:100%"></progress>`;
+  else if (status.state === 'downloaded') box.innerHTML = `<div style="font-weight:700;color:var(--success-text)">اكتمل تنزيل الإصدار ${version}.</div><p class="sub">أنشئ نسخة أمان ثم وافق على إعادة تشغيل البرنامج لتثبيته.</p><button class="btn btn-primary" onclick="prepareAndInstallUpdate('${version}')">نسخ احتياطي وتثبيت</button>`;
+  else if (status.state === 'not-available') box.innerHTML = '<div role="status" aria-live="polite" style="color:var(--success-text)">أنت تستخدم أحدث إصدار منشور.</div>';
+  else if (status.state === 'error') box.innerHTML = `<div role="alert" style="color:var(--danger-text)">تعذر التحديث: ${esc(status.message || 'خطأ غير معروف')}</div>`;
+}
+
+async function downloadSystemUpdate() {
+  try { await window.electronAPI.downloadUpdate(); }
+  catch (error) { renderUpdateStatus({ state: 'error', message: error.message }); }
+}
+
 async function checkSystemUpdates() {
   const btn = document.getElementById('updaterCheckBtn');
   const box = document.getElementById('updaterResultBox');
@@ -2317,6 +2399,10 @@ async function checkSystemUpdates() {
   if (btn) btn.innerHTML = '<span>⏳</span> جاري الفحص...';
 
   try {
+    if (window.electronAPI?.isElectron) {
+      await window.electronAPI.checkForUpdates();
+      return;
+    }
     const res = await api('GET', '/updater/check');
     box.style.display = 'block';
     if (res.hasUpdate) {
@@ -2327,8 +2413,8 @@ async function checkSystemUpdates() {
           <div style="margin-top:8px;font-size:13px;line-height:1.6;color:var(--text-body);background:var(--bg-card);padding:10px;border-radius:var(--r-xs);border:1px solid var(--border-subtle);">${esc(res.releaseNotes)}</div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
-          <button class="btn btn-primary" onclick="applySystemUpdate('${esc(res.latestVersion)}')">
-            <span>🛡️</span> تطبيق التحديث الآمن (مع نسخة احتياطية فورية)
+          <button class="btn btn-secondary" onclick="window.open('https://github.com/Alithepronce/alawa-system/releases/latest','_blank')">
+            <span>⬇️</span> تنزيل مثبت Windows من GitHub
           </button>
         </div>
       `;
@@ -2348,35 +2434,19 @@ async function checkSystemUpdates() {
   }
 }
 
-async function applySystemUpdate(ver) {
+async function prepareAndInstallUpdate(ver) {
   const ok = await confirmDialog(
-    'تطبيق التحديث الداخلي الآمن',
-    `سيقوم النظام تلقائياً بإنشاء نسخة احتياطية وفحص سلامتها (WAL Checkpoint + Integrity Check) قبل تطبيق التحديث ${ver ? 'v' + ver : ''}.\nهل تريد المتابعة؟`,
-    'نعم، ابدأ التحديث الآمن',
+    'نسخة أمان قبل التحديث',
+    `سيتم إنشاء نسخة احتياطية ثم إغلاق البرنامج وتثبيت الإصدار ${ver ? 'v' + ver : ''}. هل تريد المتابعة؟`,
+    'إنشاء النسخة والتثبيت',
     false
   );
   if (!ok) return;
 
   try {
     const res = await api('POST', '/updater/apply');
-    toast(res.message || 'تم حفظ النسخة الاحتياطية بنجاح قبل التحديث', 'ok');
-    document.getElementById('modalRoot').innerHTML = `
-      <div class="modal-overlay">
-        <div class="modal-box" style="max-width:440px;">
-          <div class="modal-header">
-            <h3>🛡️ تم تأمين البيانات بنجاح</h3>
-          </div>
-          <div class="modal-body" style="text-align:center;padding:24px 16px;">
-            <div style="font-size:36px;margin-bottom:12px;">✅</div>
-            <p style="font-weight:700;font-size:14px;color:var(--text-heading);margin-bottom:8px;">${esc(res.message)}</p>
-            <p class="sub">تم حفظ ملف الأمان في: <code>${esc(res.backupFile)}</code></p>
-          </div>
-          <div class="modal-footer" style="justify-content:center;">
-            <button class="btn btn-primary" onclick="closeModal(); checkSystemUpdates();">موافق</button>
-          </div>
-        </div>
-      </div>
-    `;
+    const installNow = await confirmDialog('اكتملت نسخة الأمان', `حُفظت النسخة ${res.backupFile}. سيعاد تشغيل التطبيق لتثبيت التحديث.`, 'إعادة التشغيل والتثبيت', false);
+    if (installNow) await window.electronAPI.installUpdate();
   } catch (err) {
     toast(err.message, 'err');
   }
@@ -2485,7 +2555,44 @@ updateClock();
 /* =========================================================
    BOOTSTRAP
 ========================================================= */
+// Keyboard-accessible dialogs and deterministic label associations for generated forms.
+(() => {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  let priorFocus = null;
+  const bindLabels = scope => scope.querySelectorAll('.form-group label').forEach(label => {
+    const control = label.parentElement?.querySelector('input,select,textarea');
+    if (!control) return;
+    if (!control.id) control.id = `field-${Math.random().toString(36).slice(2)}`;
+    label.htmlFor = control.id;
+  });
+  bindLabels(document);
+  new MutationObserver(() => {
+    const dialog = root.querySelector('.modal-box');
+    if (dialog) {
+      if (!priorFocus) priorFocus = document.activeElement;
+      dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+      const heading = dialog.querySelector('h3');
+      if (heading) { if (!heading.id) heading.id = `dialog-title-${Math.random().toString(36).slice(2)}`; dialog.setAttribute('aria-labelledby', heading.id); }
+      bindLabels(dialog);
+      setTimeout(() => dialog.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled])')?.focus(), 0);
+    } else if (priorFocus) {
+      const target = priorFocus; priorFocus = null;
+      if (target.isConnected) target.focus();
+    }
+  }).observe(root, { childList: true, subtree: true });
+  document.addEventListener('keydown', event => {
+    const dialog = root.querySelector('.modal-box');
+    if (!dialog || event.key !== 'Tab') return;
+    const controls = [...dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+    if (!controls.length) { event.preventDefault(); dialog.focus(); return; }
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+})();
 (async function boot() {
+  window.electronAPI?.onUpdateStatus(renderUpdateStatus);
   // Initialize stored theme
   const savedTheme = localStorage.getItem('alawa_theme');
   if (savedTheme === 'dark') {
@@ -2495,6 +2602,7 @@ updateClock();
     updateThemeUI(false);
   }
 
+  if (!await ensureLicense()) return;
   try {
     const me = await api('GET', '/me');
     currentUser = me;

@@ -1,7 +1,7 @@
 'use strict';
 const db = require('../db');
 const auth = require('../auth');
-const { HttpError, requireAuth, requireRole, logActivity, num, str, nowISO, weightKg } = require('../helpers');
+const { HttpError, requirePermission, requireRole, logActivity, num, str, nowISO, weightKg } = require('../helpers');
 
 function priceForItem(item, unit, category) {
   const perBag = category === 'جملة' ? item.price_wholesale : category === 'مكاتب' ? item.price_office : item.price_normal;
@@ -12,7 +12,7 @@ function priceForItem(item, unit, category) {
 }
 
 function listInvoices(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'sales');
   const { from, to, customerId } = ctx.query;
   let sql = 'SELECT * FROM invoices WHERE 1=1';
   const params = [];
@@ -30,7 +30,15 @@ function listInvoices(ctx) {
 // (and could be bypassed by editing it) is re-verified here, server-side, against the
 // database as it actually is right now — not as the client believes it to be.
 function createInvoice(ctx) {
-  const session = requireAuth(ctx);
+  const session = requirePermission(ctx, 'sales');
+  const requestId = str(ctx.body.requestId);
+  if (!/^[a-f0-9-]{36}$/i.test(requestId)) throw new HttpError(400, 'معرّف عملية البيع غير صالح');
+  const prior = db.prepare('SELECT invoice_id FROM invoice_requests WHERE user_id=? AND request_id=?').get(session.id, requestId);
+  if (prior) {
+    const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(prior.invoice_id);
+    invoice.lines = db.prepare('SELECT * FROM invoice_lines WHERE invoice_id=?').all(prior.invoice_id);
+    return { data: { id: prior.invoice_id, invoice, lowStockWarnings: [] } };
+  }
   const customerId = ctx.body.customerId;
   const lines = Array.isArray(ctx.body.lines) ? ctx.body.lines : [];
   if (!customerId) throw new HttpError(400, 'اختر الزبون');
@@ -55,12 +63,15 @@ function createInvoice(ctx) {
   let total = 0;
   for (const l of lines) {
     const item = items[l.itemId];
+    if (!['كيس', 'كغم', 'طن'].includes(str(l.unit) || 'كيس')) throw new HttpError(400, 'وحدة البيع غير صحيحة');
+    if (item.bag_weight <= 0) throw new HttpError(400, `وزن الكيس غير صالح للمادة "${item.name}"`);
     const qty = num(l.qty);
     const unit = str(l.unit) || 'كيس';
     if (qty <= 0) throw new HttpError(400, 'كمية غير صحيحة');
     const wKg = weightKg(qty, unit, item.bag_weight);
     neededByItem[l.itemId] = (neededByItem[l.itemId] || 0) + wKg;
     const price = l.priceOverride != null ? num(l.priceOverride) : priceForItem(item, unit, customer.category);
+    if (price < 0 || !Number.isFinite(price)) throw new HttpError(400, 'سعر البيع لا يمكن أن يكون سالباً');
     const lineTotal = price * qty;
     total += lineTotal;
     computedLines.push({ itemId: item.id, itemName: item.name, qty, unit, weightKg: wKg, price, total: lineTotal, costPerKgAtSale: item.avg_cost_per_kg || 0 });
@@ -73,6 +84,8 @@ function createInvoice(ctx) {
   }
 
   const paid = Math.max(0, num(ctx.body.paid));
+  if (total <= 0) throw new HttpError(400, 'إجمالي الفاتورة يجب أن يكون أكبر من صفر');
+  if (paid > total + 0.005) throw new HttpError(400, 'المبلغ المقبوض لا يمكن أن يتجاوز إجمالي الفاتورة');
   const remaining = Math.max(total - paid, 0);
   const prevDebt = customer.balance;
   const projected = customer.balance + remaining;
@@ -100,6 +113,7 @@ function createInvoice(ctx) {
       VALUES (?,?,?,?,?,?,?,?,?,?,?)
     `).run(customerId, date, ctx.body.dueDate || null, total, paid, remaining, prevDebt, str(ctx.body.driverName), str(ctx.body.driverPhone), overridden ? 1 : 0, session.id);
     invoiceId = Number(info.lastInsertRowid);
+    db.prepare('INSERT INTO invoice_requests (user_id,request_id,invoice_id) VALUES (?,?,?)').run(session.id, requestId, invoiceId);
 
     const insLine = db.prepare(`
       INSERT INTO invoice_lines (invoice_id, item_id, item_name, qty, unit, weight_kg, price, total, cost_per_kg_at_sale)
@@ -128,11 +142,12 @@ function createInvoice(ctx) {
 
   const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(invoiceId);
   invoice.lines = db.prepare('SELECT * FROM invoice_lines WHERE invoice_id=?').all(invoiceId);
-  return { status: 201, data: { invoice, lowStockWarnings } };
+  logActivity(ctx, 'فاتورة مبيعات', `القائمة #${invoiceId} للزبون ${customer.name} — إجمالي ${total.toFixed(2)}، مقبوض ${paid.toFixed(2)}`);
+  return { status: 201, data: { id: invoiceId, invoice, lowStockWarnings } };
 }
 
 function voidInvoice(ctx, id) {
-  const session = requireAuth(ctx);
+  const session = requirePermission(ctx, 'sales');
   const invoice = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
   if (!invoice) throw new HttpError(404, 'الفاتورة غير موجودة');
   if (invoice.voided) throw new HttpError(400, 'الفاتورة ملغاة مسبقاً');

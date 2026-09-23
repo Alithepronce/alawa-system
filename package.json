@@ -1,6 +1,6 @@
 {
   "name": "alawa-management-system",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "نظام إدارة العلوة — نظام مالي ومحاسبي متكامل لسطح المكتب (Node.js + SQLite)",
   "author": "Alawa Management System",
   "main": "main.js",
@@ -9,14 +9,15 @@
     "test": "node test_system.js",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
+    "release": "electron-builder --win --x64 --publish always",
     "pack": "electron-builder --dir && node scripts/stamp_exe.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "devDependencies": {
-    "electron": "^31.7.7",
-    "electron-builder": "^24.0.0"
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.alawa.management",
@@ -32,11 +33,9 @@
       "public/**",
       "assets/**"
     ],
-    "extraResources": [
-      {
-        "from": "data",
-        "to": "data"
-      }
+    "asarUnpack": [
+      "server/**",
+      "public/**"
     ],
     "win": {
       "executableName": "alawa-system",
@@ -50,7 +49,8 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
@@ -62,6 +62,15 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Alithepronce",
+      "repo": "alawa-system",
+      "releaseType": "release"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

@@ -1,18 +1,53 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const http = require('node:http');
 
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+// userData is writable after installation, unlike the files inside app.asar.
+const DATA_DIR = path.join(app.getPath('userData'), 'data');
 const LOG_FILE = path.join(DATA_DIR, 'server.log');
 
 let mainWindow = null;
 let tray = null;
 let serverProc = null;
 let isQuitting = false;
+let backendReady = false;
+let updateDownloaded = false;
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.allowPrerelease = false;
+
+function sendUpdateStatus(status) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updates:status', status);
+}
+
+autoUpdater.on('checking-for-update', () => sendUpdateStatus({ state: 'checking' }));
+autoUpdater.on('update-available', info => sendUpdateStatus({ state: 'available', version: info.version, releaseNotes: info.releaseNotes || '' }));
+autoUpdater.on('update-not-available', info => sendUpdateStatus({ state: 'not-available', version: info.version }));
+autoUpdater.on('download-progress', progress => sendUpdateStatus({ state: 'progress', percent: Math.round(progress.percent), transferred: progress.transferred, total: progress.total }));
+autoUpdater.on('update-downloaded', info => { updateDownloaded = true; sendUpdateStatus({ state: 'downloaded', version: info.version }); });
+autoUpdater.on('error', error => sendUpdateStatus({ state: 'error', message: error.message }));
+
+ipcMain.handle('updates:check', async () => {
+  if (!app.isPackaged || process.platform !== 'win32') throw new Error('التحديث التلقائي متاح في نسخة Windows المثبتة فقط');
+  const result = await autoUpdater.checkForUpdates();
+  return { version: result?.updateInfo?.version || null };
+});
+ipcMain.handle('updates:download', async () => {
+  if (!app.isPackaged || process.platform !== 'win32') throw new Error('التنزيل متاح في نسخة Windows المثبتة فقط');
+  await autoUpdater.downloadUpdate();
+  return { ok: true };
+});
+ipcMain.handle('updates:install', () => {
+  if (!updateDownloaded) throw new Error('لم يكتمل تنزيل التحديث بعد');
+  autoUpdater.quitAndInstall(false, true);
+  return { ok: true };
+});
 
 // Enforce single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -29,8 +64,8 @@ if (!gotTheLock) {
 }
 
 function checkServerRunning(port, callback) {
-  const req = http.get(`http://localhost:${port}/api/settings`, () => {
-    callback(true);
+  const req = http.get(`http://127.0.0.1:${port}/api/settings`, (res) => {
+    callback(res.headers['x-alawa-system'] === 'desktop');
   });
   req.on('error', () => {
     callback(false);
@@ -55,25 +90,37 @@ function startBackendServer(onReady) {
     }
 
     const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
-    const serverScript = path.join(__dirname, 'server', 'server.js');
+    const sourceRoot = app.isPackaged
+      ? path.join(process.resourcesPath, 'app.asar.unpacked')
+      : __dirname;
+    const serverScript = path.join(sourceRoot, 'server', 'server.js');
 
-    // Detect host node runtime (Node 22+ with native node:sqlite) or fallback to electron runtime
+    // Detect Node 22.5+ (required for built-in node:sqlite) or use Electron's Node runtime.
     let runtimeBinary = process.execPath;
+    let isElectronRuntime = true;
     try {
-      const { execSync } = require('node:child_process');
-      execSync('node -v', { stdio: 'ignore' });
-      runtimeBinary = 'node';
+      const { execFileSync } = require('node:child_process');
+      const version = execFileSync('node', ['-p', 'process.versions.node'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      const [major, minor] = version.split('.').map(Number);
+      if (major > 22 || (major === 22 && minor >= 5)) { runtimeBinary = 'node'; isElectronRuntime = false; }
     } catch (_) {
       runtimeBinary = process.execPath;
     }
 
     // Spawn server process
     serverProc = spawn(runtimeBinary, [serverScript], {
-      env: { ...process.env, PORT: String(PORT), ELECTRON_RUN_AS_NODE: '1' },
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        ...(isElectronRuntime ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+        ALAWA_DATA_DIR: DATA_DIR,
+        ALAWA_APP_VERSION: app.getVersion()
+      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
     let ready = false;
+    let startupFailed = false;
     serverProc.stdout.pipe(logStream);
     serverProc.stderr.pipe(logStream);
 
@@ -86,12 +133,13 @@ function startBackendServer(onReady) {
     });
 
     serverProc.on('error', (err) => {
+      startupFailed = true;
       console.error('Failed to spawn server process:', err);
       dialog.showErrorBox('خطأ في تشغيل الخادم', `تعذر بدء خادم البيانات: ${err.message}`);
     });
 
     serverProc.on('exit', (code) => {
-      if (!isQuitting) {
+      if (!isQuitting && !startupFailed) {
         console.warn(`Server exited with code ${code}. Restarting in 2 seconds...`);
         setTimeout(() => startBackendServer(() => {}), 2000);
       }
@@ -116,7 +164,9 @@ function startBackendServer(onReady) {
       clearInterval(pollInterval);
       if (!ready) {
         ready = true;
-        onReady();
+        startupFailed = true;
+        dialog.showErrorBox('تعذر تشغيل النظام', `لم يبدأ خادم البيانات خلال المهلة. راجع سجل التشغيل: ${LOG_FILE}`);
+        if (serverProc && !serverProc.killed) serverProc.kill();
       }
     }, 4000);
   });
@@ -130,7 +180,7 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 820,
-    minWidth: 960,
+    minWidth: 720,
     minHeight: 640,
     title: 'نظام إدارة العلوة — منظومة زمام',
     icon: fs.existsSync(iconFile) ? iconFile : undefined,
@@ -145,7 +195,7 @@ function createMainWindow() {
     autoHideMenuBar: true
   });
 
-  mainWindow.loadURL(`http://localhost:${PORT}`);
+  mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -162,10 +212,11 @@ function createMainWindow() {
 
   // External links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://localhost') || url.includes('/print/')) {
-      return { action: 'allow' };
-    }
-    shell.openExternal(url);
+    try {
+      const target = new URL(url);
+      if (target.origin === `http://127.0.0.1:${PORT}`) return { action: 'allow' };
+      if (['https:', 'http:'].includes(target.protocol)) shell.openExternal(target.href);
+    } catch (_) {}
     return { action: 'deny' };
   });
 
@@ -207,11 +258,12 @@ function setupTray() {
 
 app.whenReady().then(() => {
   startBackendServer(() => {
+    backendReady = true;
     createMainWindow();
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (backendReady && BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });

@@ -1,9 +1,9 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requireAuth, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
 
 function createPurchase(ctx) {
-  const session = requireAuth(ctx);
+  const session = requirePermission(ctx, 'purchases');
   const supplierId = ctx.body.supplierId;
   const lines = Array.isArray(ctx.body.lines) ? ctx.body.lines : [];
   if (!supplierId) throw new HttpError(400, 'اختر المورد');
@@ -18,22 +18,21 @@ function createPurchase(ctx) {
     if (!item) throw new HttpError(400, `مادة غير موجودة (${l.itemId})`);
     const qty = num(l.qty), cost = num(l.cost);
     if (qty <= 0) throw new HttpError(400, 'كمية غير صحيحة');
-    // Purchase cost must not exceed wholesale price per kg — transport/loading are added separately below
-    const wholesalePerKg = (item.price_wholesale || 0) / (item.bag_weight || 1);
-    if (wholesalePerKg > 0 && cost > wholesalePerKg) {
-      throw new HttpError(400, `تكلفة الشراء للكيلو (${cost}) تتجاوز سعر الجملة للكيلو (${wholesalePerKg.toFixed(2)}) للمادة "${item.name}"`);
-    }
+    if (cost < 0) throw new HttpError(400, 'تكلفة الشراء لا يمكن أن تكون سالبة');
     items[l.itemId] = item;
     totalQty += qty;
   }
 
   const transportCost = num(ctx.body.transportCost);
   const loadingCost = num(ctx.body.loadingCost);
+  if (transportCost < 0 || loadingCost < 0) throw new HttpError(400, 'أجور النقل والتحميل لا يمكن أن تكون سالبة');
   const extraPerKg = totalQty > 0 ? (transportCost + loadingCost) / totalQty : 0;
   let subtotal = 0;
   lines.forEach(l => subtotal += num(l.qty) * num(l.cost));
   const total = subtotal + transportCost + loadingCost;
   const paid = Math.max(0, num(ctx.body.paid));
+  if (total <= 0) throw new HttpError(400, 'إجمالي الشراء يجب أن يكون أكبر من صفر');
+  if (paid > total + 0.005) throw new HttpError(400, 'المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الشراء');
   const remaining = Math.max(total - paid, 0);
   const date = nowISO();
 

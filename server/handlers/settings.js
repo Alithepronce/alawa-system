@@ -8,10 +8,11 @@ const DEFAULT_SETTINGS = {
   usdRate: '1530'
 };
 function getSettings(ctx) {
-  requireAuth(ctx);
+  const session = requireAuth(ctx);
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const out = { ...DEFAULT_SETTINGS };
   rows.forEach(r => out[r.key] = r.value);
+  if (session.role !== 'المالك') { delete out.gdriveClientId; delete out.ownerPhone; }
   return { data: out };
 }
 function putSettings(ctx) {

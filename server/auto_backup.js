@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('./db');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = require('./data-path');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_PATH = path.join(DATA_DIR, 'alawa.db');
 const MAX_BACKUPS = 15;

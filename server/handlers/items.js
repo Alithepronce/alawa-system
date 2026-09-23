@@ -1,50 +1,60 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requireAuth, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
 
 function listItems(ctx) {
-  requireAuth(ctx);
+  const session = requirePermission(ctx, 'items.read');
   const includeDeleted = ctx.query && ctx.query.all === '1';
   const sql = includeDeleted
     ? 'SELECT * FROM items ORDER BY name'
     : 'SELECT * FROM items WHERE is_deleted = 0 ORDER BY name';
-  return { data: db.prepare(sql).all() };
+  const items = db.prepare(sql).all();
+  if (session.role === 'أمين مخزن') return { data: items.map(({ price_wholesale, price_office, price_normal, avg_cost_per_kg, ...item }) => item) };
+  return { data: items };
 }
 function createItem(ctx) {
-  requireAuth(ctx);
+  const session = requirePermission(ctx, 'items.manage');
   const name = str(ctx.body.name);
   if (!name) throw new HttpError(400, 'أدخل اسم المادة');
+  const bagWeight = num(ctx.body.bagWeight, 1), stockKg = num(ctx.body.stockKg), lowStock = num(ctx.body.lowStock, 200);
+  const openingCost = num(ctx.body.openingCost), wholesale = num(ctx.body.priceWholesale), office = num(ctx.body.priceOffice), normal = num(ctx.body.priceNormal);
+  if (bagWeight <= 0 || stockKg < 0 || lowStock < 0 || openingCost < 0 || wholesale < 0 || office < 0 || normal < 0) throw new HttpError(400, 'الأوزان والكميات والتكاليف والأسعار يجب أن تكون صفراً أو أكبر، ووزن الكيس أكبر من صفر');
+  if (session.role === 'أمين مخزن' && (openingCost || wholesale || office || normal)) throw new HttpError(403, 'لا يملك أمين المخزن صلاحية تحديد التكلفة أو أسعار البيع');
   const info = db.prepare(`
     INSERT INTO items (name, bag_weight, stock_kg, low_stock, avg_cost_per_kg, price_wholesale, price_office, price_normal, expiry_date, sale_count, barcode)
     VALUES (?,?,?,?,?,?,?,?,?,0,?)
   `).run(
-    name, num(ctx.body.bagWeight, 1), num(ctx.body.stockKg), num(ctx.body.lowStock, 200),
-    num(ctx.body.openingCost), num(ctx.body.priceWholesale), num(ctx.body.priceOffice), num(ctx.body.priceNormal),
+    name, bagWeight, stockKg, lowStock,
+    openingCost, wholesale, office, normal,
     ctx.body.expiryDate || null, str(ctx.body.barcode) || null
   );
   logActivity(ctx, 'إضافة مادة', name);
   return { status: 201, data: { id: Number(info.lastInsertRowid) } };
 }
 function updateItem(ctx, id) {
-  requireAuth(ctx);
+  const session = requirePermission(ctx, 'items.manage');
   const it = db.prepare('SELECT * FROM items WHERE id=?').get(id);
   if (!it) throw new HttpError(404, 'المادة غير موجودة');
   const name = str(ctx.body.name) || it.name;
+  const bagWeight = num(ctx.body.bagWeight, it.bag_weight), lowStock = num(ctx.body.lowStock, it.low_stock);
+  const wholesale = num(ctx.body.priceWholesale, it.price_wholesale), office = num(ctx.body.priceOffice, it.price_office), normal = num(ctx.body.priceNormal, it.price_normal);
+  if (bagWeight <= 0 || lowStock < 0 || wholesale < 0 || office < 0 || normal < 0) throw new HttpError(400, 'وزن الكيس يجب أن يكون أكبر من صفر والأسعار والحدود لا يمكن أن تكون سالبة');
+  if (session.role === 'أمين مخزن' && (wholesale !== it.price_wholesale || office !== it.price_office || normal !== it.price_normal)) throw new HttpError(403, 'لا يملك أمين المخزن صلاحية تعديل أسعار البيع');
   // NOTE: stock_kg is intentionally omitted from direct update — inventory must only change
   // via sales, purchases, returns, or formal stock adjustments (adjustItem) with recorded reason.
   db.prepare(`
     UPDATE items SET name=?, bag_weight=?, low_stock=?, price_wholesale=?, price_office=?, price_normal=?, expiry_date=?, barcode=?
     WHERE id=?
   `).run(
-    name, num(ctx.body.bagWeight, it.bag_weight), num(ctx.body.lowStock, it.low_stock),
-    num(ctx.body.priceWholesale, it.price_wholesale), num(ctx.body.priceOffice, it.price_office), num(ctx.body.priceNormal, it.price_normal),
+    name, bagWeight, lowStock,
+    wholesale, office, normal,
     ctx.body.expiryDate || it.expiry_date, str(ctx.body.barcode) || it.barcode || null, id
   );
   logActivity(ctx, 'تعديل مادة', name);
   return { data: { ok: true } };
 }
 function deleteItem(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'items.manage');
   const it = db.prepare('SELECT * FROM items WHERE id=?').get(id);
   if (!it) throw new HttpError(404, 'المادة غير موجودة');
 
@@ -77,7 +87,7 @@ function deleteItem(ctx, id) {
 // Stock adjustment: reason required; any DECREASE is costed against profit as wastage,
 // instead of silently vanishing from inventory with no financial trace.
 function adjustItem(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'inventory.adjust');
   const it = db.prepare('SELECT * FROM items WHERE id=?').get(id);
   if (!it) throw new HttpError(404, 'المادة غير موجودة');
   const newStock = num(ctx.body.newStock, NaN);

@@ -8,10 +8,12 @@ const url = require('node:url');
 const db = require('./db');
 const auth = require('./auth');
 const api = require('./api');
+const license = require('./license');
 require('./migrations');
 require('./auto_backup');
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.ALAWA_HOST || '127.0.0.1';
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const MIME = {
@@ -24,10 +26,12 @@ function sendJSON(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
+    'X-Alawa-System': 'desktop',
     'Content-Length': Buffer.byteLength(body),
     // Basic hardening headers
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
     'Cache-Control': 'no-store'
   });
   res.end(body);
@@ -37,7 +41,7 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
     let size = 0;
-    const MAX = 20 * 1024 * 1024; // 20MB — generous enough for a full SQL backup import
+    const MAX = 20 * 1024 * 1024; // 20MB — maximum structured JSON backup/import payload
     req.on('data', chunk => {
       size += chunk.length;
       if (size > MAX) { reject(new Error('حجم الطلب كبير جداً')); req.destroy(); return; }
@@ -81,15 +85,17 @@ setInterval(() => {
 function serveStatic(req, res, pathname) {
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? '/index.html' : pathname);
   // Prevent path traversal outside the public directory
-  if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
+  const relative = path.relative(PUBLIC_DIR, filePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) { res.writeHead(403); res.end('Forbidden'); return; }
   fs.readFile(filePath, (err, content) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
     const ext = path.extname(filePath);
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'SAMEORIGIN',
-      'Referrer-Policy': 'strict-origin-when-cross-origin'
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     });
     res.end(content);
   });
@@ -106,7 +112,9 @@ const server = http.createServer(async (req, res) => {
   });
 
   const parsed = url.parse(req.url, true);
-  const pathname = decodeURIComponent(parsed.pathname);
+  let pathname;
+  try { pathname = decodeURIComponent(parsed.pathname); }
+  catch (_) { return sendJSON(res, 400, { error: 'مسار الطلب غير صالح' }); }
 
   if (!pathname.startsWith('/api/')) {
     return serveStatic(req, res, pathname);
@@ -116,6 +124,12 @@ const server = http.createServer(async (req, res) => {
   const clientIp = req.socket.remoteAddress || '127.0.0.1';
   if (!checkRateLimit(clientIp)) {
     return sendJSON(res, 429, { error: 'طلبات كثيرة جداً — يرجى الانتظار قليلاً' });
+  }
+
+  // No business API is available until a signed, device-bound licence exists.
+  const licenseRoutes = new Set(['/api/license/status', '/api/license/activate', '/api/license/refresh']);
+  if (!licenseRoutes.has(pathname) && !license.status().valid) {
+    return sendJSON(res, 402, { error: 'يلزم تفعيل ترخيص النظام لهذا الجهاز', license: license.status() });
   }
 
   // ---- Auth context for every /api/ request ----
@@ -162,19 +176,16 @@ function seedDefaultOwner() {
   const auth2 = require('./auth');
   const defaultPin = '1234';
   const { hash, salt } = auth2.hashPassword(defaultPin);
-  db.prepare('INSERT INTO users (name, role, password_hash, salt) VALUES (?,?,?,?)').run('المالك', 'المالك', hash, salt);
+  db.prepare('INSERT INTO users (name, role, password_hash, salt, must_change_password) VALUES (?,?,?,?,1)').run('المالك', 'المالك', hash, salt);
   console.log('  Default owner account created — name: المالك — PIN: 1234');
   console.log('  Change this PIN immediately from the Users screen after first login.\n');
 }
 
-const { initLicense } = require('./license');
-
 checkDatabaseIntegrity();
 seedDefaultOwner();
-initLicense();
+license.initLicense();
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`\n  Alawa Management System — server is running`);
   console.log(`  Open your browser at: http://localhost:${PORT}\n`);
 });
-

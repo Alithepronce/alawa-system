@@ -1,9 +1,9 @@
 'use strict';
 const db = require('../db');
-const { requireAuth, requireRole, localDateStr } = require('../helpers');
+const { requirePermission, requireRole, localDateStr } = require('../helpers');
 
 function dailyReport(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'reports');
   const today = localDateStr(new Date().toISOString());
   const invoices = db.prepare('SELECT * FROM invoices WHERE voided=0').all().filter(i => localDateStr(i.date) === today);
   const cash = db.prepare('SELECT * FROM cashbox').all().filter(c => localDateStr(c.date) === today);
@@ -22,7 +22,7 @@ function dailyReport(ctx) {
 }
 
 function profitReport(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'reports');
   const { from, to } = ctx.query;
   const inRange = iso => { const d = localDateStr(iso); return (!from || d >= from) && (!to || d <= to); };
 
@@ -55,14 +55,14 @@ function profitReport(ctx) {
 }
 
 function weeklyReport(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'reports');
   const { from, to } = ctx.query;
   const inRange = iso => { const d = localDateStr(iso); return (!from || d >= from) && (!to || d <= to); };
 
   const invoices = db.prepare('SELECT * FROM invoices WHERE voided=0').all().filter(i => inRange(i.date));
   const cash = db.prepare('SELECT * FROM cashbox').all().filter(c => inRange(c.date));
-  const directSales = cash.filter(c => c.type === 'in' && c.source === 'بيع').reduce((s, c) => s + c.amount, 0);
-  const collections = cash.filter(c => c.type === 'in' && c.source === 'قبض من زبون').reduce((s, c) => s + c.amount, 0);
+  const totalCashIn = cash.filter(c => c.type === 'in').reduce((s, c) => s + c.amount, 0);
+  const totalCashOut = cash.filter(c => c.type === 'out').reduce((s, c) => s + c.amount, 0);
   const manualExpense = cash.filter(c => c.type === 'out' && c.source === 'يدوي').reduce((s, c) => s + c.amount, 0);
   const creditSales = invoices.reduce((s, i) => s + i.remaining, 0);
   const totalSales = invoices.reduce((s, i) => s + i.total, 0);
@@ -82,15 +82,15 @@ function weeklyReport(ctx) {
 
   return {
     data: {
-      totalCashIn: directSales + collections, creditSales, totalSales,
-      manualExpense, netAfterExpense: directSales + collections - manualExpense,
+      totalCashIn, totalCashOut, creditSales, totalSales,
+      manualExpense, netCashFlow: totalCashIn - totalCashOut,
       customers
     }
   };
 }
 
 function dashboardStats(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'reports');
   const today = localDateStr(new Date().toISOString());
 
   // Today's sales & invoice count
@@ -143,5 +143,3 @@ function activityLog(ctx) {
 }
 
 module.exports = { dailyReport, profitReport, weeklyReport, activityLog, dashboardStats };
-
-

@@ -1,9 +1,9 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requireAuth, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
 
 function listCashbox(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'cashbox');
   const { from, to } = ctx.query;
   let sql = 'SELECT * FROM cashbox WHERE 1=1';
   const params = [];
@@ -16,7 +16,7 @@ function listCashbox(ctx) {
 // Manual cashbox entry. If a customerId is supplied with type='in', this is treated as a
 // real receipt against that customer's debt (not just an untracked generic cash movement).
 function createCashboxManual(ctx) {
-  const session = requireAuth(ctx);
+  const session = requirePermission(ctx, 'cashbox');
   const type = str(ctx.body.type);
   const amount = num(ctx.body.amount);
   const note = str(ctx.body.note);

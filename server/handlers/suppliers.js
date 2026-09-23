@@ -1,36 +1,43 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requireAuth, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
 
 function listSuppliers(ctx) {
-  requireAuth(ctx);
+  const session = requirePermission(ctx, 'suppliers.read');
   const includeDeleted = ctx.query && ctx.query.all === '1';
   const sql = includeDeleted
     ? 'SELECT * FROM suppliers ORDER BY name'
     : 'SELECT * FROM suppliers WHERE is_deleted = 0 ORDER BY name';
-  return { data: db.prepare(sql).all() };
+  const suppliers = db.prepare(sql).all();
+  if (session.role === 'أمين مخزن') return { data: suppliers.map(({ balance, ...supplier }) => supplier) };
+  return { data: suppliers };
 }
 function createSupplier(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'suppliers.manage');
   const name = str(ctx.body.name);
   if (!name) throw new HttpError(400, 'أدخل اسم المورد');
-  const info = db.prepare('INSERT INTO suppliers (name, phone, balance, credit_from_supplier) VALUES (?,?,?,?)')
-    .run(name, str(ctx.body.phone), num(ctx.body.balance), num(ctx.body.creditFromSupplier));
+  const openingBalance = num(ctx.body.openingBalance);
+  let info;
+  db.exec('BEGIN');
+  try {
+    info = db.prepare('INSERT INTO suppliers (name, phone, balance) VALUES (?,?,?)').run(name, str(ctx.body.phone), openingBalance);
+    if (openingBalance !== 0) db.prepare('INSERT INTO supplier_openings (supplier_id,amount,date,created_by) VALUES (?,?,?,?)').run(Number(info.lastInsertRowid), openingBalance, nowISO(), ctx.session.id);
+    db.exec('COMMIT');
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
   logActivity(ctx, 'إضافة مورد', name);
   return { status: 201, data: { id: Number(info.lastInsertRowid) } };
 }
 function updateSupplier(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'suppliers.manage');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
   if (!s) throw new HttpError(404, 'المورد غير موجود');
   const name = str(ctx.body.name) || s.name;
-  db.prepare('UPDATE suppliers SET name=?, phone=?, balance=?, credit_from_supplier=? WHERE id=?')
-    .run(name, str(ctx.body.phone), num(ctx.body.balance, s.balance), num(ctx.body.creditFromSupplier, s.credit_from_supplier), id);
+  db.prepare('UPDATE suppliers SET name=?, phone=? WHERE id=?').run(name, str(ctx.body.phone), id);
   logActivity(ctx, 'تعديل مورد', name);
   return { data: { ok: true } };
 }
 function deleteSupplier(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'suppliers.manage');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
   if (!s) throw new HttpError(404, 'المورد غير موجود');
 
@@ -60,7 +67,7 @@ function deleteSupplier(ctx, id) {
   return { data: { ok: true } };
 }
 function supplierPayment(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'suppliers.finance');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
   if (!s) throw new HttpError(404, 'المورد غير موجود');
   const amount = num(ctx.body.amount);
@@ -77,10 +84,12 @@ function supplierPayment(ctx, id) {
   return { data: { ok: true } };
 }
 function supplierLedger(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'suppliers.ledger');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
   if (!s) throw new HttpError(404, 'المورد غير موجود');
   const rows = [];
+  const opening = db.prepare('SELECT * FROM supplier_openings WHERE supplier_id=? ORDER BY date').all(id);
+  for (const o of opening) rows.push({ date: o.date, desc: 'رصيد افتتاحي', debit: o.amount < 0 ? Math.abs(o.amount) : 0, credit: o.amount > 0 ? o.amount : 0 });
   const purchases = db.prepare('SELECT * FROM purchases WHERE supplier_id=? ORDER BY date').all(id);
   const plines = db.prepare('SELECT * FROM purchase_lines WHERE purchase_id=?');
   for (const p of purchases) {
@@ -96,7 +105,7 @@ function supplierLedger(ctx, id) {
   const returns = db.prepare('SELECT * FROM supplier_returns WHERE supplier_id=? ORDER BY date').all(id);
   for (const r of returns) {
     const label = r.method === 'credit' ? 'إرجاع مواد (خصم من الرصيد): ' : 'إرجاع مواد (نقدي): ';
-    rows.push({ date: r.date, desc: label + r.item_name, debit: r.method === 'credit' ? r.amount : 0, credit: 0, material: r.item_name, qty: `${r.qty} ${r.unit}` });
+    rows.push({ date: r.date, desc: `${label}${r.item_name} — ${r.amount}`, debit: r.method === 'credit' ? r.amount : 0, credit: 0, material: r.item_name, qty: `${r.qty} ${r.unit}` });
   }
   rows.sort((a, b) => new Date(a.date) - new Date(b.date));
   return { data: { rows, balance: s.balance, supplier: s } };

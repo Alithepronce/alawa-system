@@ -12,12 +12,17 @@ const cashbox = require('./handlers/cashbox');
 const reports = require('./handlers/reports');
 const backup = require('./handlers/backup');
 const updater = require('./updater');
+const license = require('./handlers/license');
 
 // Route table: [method, path pattern with :param placeholders, handler]
 const routes = [
+  ['GET',  '/api/license/status', () => license.getStatus()],
+  ['POST', '/api/license/activate', (ctx) => license.activate(ctx)],
+  ['POST', '/api/license/refresh', () => license.refresh()],
   ['POST', '/api/login', (ctx) => authH.handleLogin(ctx)],
   ['POST', '/api/logout', (ctx) => authH.handleLogout(ctx)],
   ['GET',  '/api/me', (ctx) => authH.handleMe(ctx)],
+  ['POST', '/api/me/password', (ctx) => authH.changeOwnPassword(ctx)],
 
   ['GET',    '/api/users', (ctx) => users.listUsers(ctx)],
   ['POST',   '/api/users', (ctx) => users.createUser(ctx)],
@@ -67,8 +72,8 @@ const routes = [
   ['GET', '/api/reports/weekly', (ctx) => reports.weeklyReport(ctx)],
   ['GET', '/api/activity-log', (ctx) => reports.activityLog(ctx)],
 
-  ['GET',  '/api/backup/export', (ctx) => backup.exportSQL(ctx)],
-  ['POST', '/api/backup/import', (ctx) => backup.importSQL(ctx)],
+  ['GET',  '/api/backup/export', (ctx) => backup.exportBackup(ctx)],
+  ['POST', '/api/backup/import', (ctx) => backup.importBackup(ctx)],
   ['GET',  '/api/backup/list', (ctx) => backup.listAutoBackups(ctx)],
   ['POST', '/api/backup/create', (ctx) => backup.triggerAutoBackup(ctx)],
 

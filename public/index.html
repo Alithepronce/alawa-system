@@ -38,7 +38,7 @@
       <input type="password" class="form-control is-num" id="loginPassword" placeholder="••••" autocomplete="current-password">
     </div>
     
-    <div id="loginError" class="login-error"></div>
+    <div id="loginError" class="login-error" role="alert" aria-live="assertive"></div>
     <button class="btn btn-primary" style="width:100%;padding:11px;font-size:14.5px;margin-top:4px;" onclick="doLogin()">تسجيل الدخول</button>
   </div>
 </div>
@@ -70,12 +70,12 @@
         <button class="navbtn active" data-scr="dashboard" onclick="showScreen('dashboard')">
           <span class="nav-icon">📊</span><span class="nav-label">لوحة المعلومات</span>
         </button>
-        <button class="navbtn" data-scr="pos" onclick="showScreen('pos')">
+        <button class="navbtn accountant-owner-only" data-scr="pos" aria-label="نقطة البيع" onclick="showScreen('pos')">
           <span class="nav-icon">🧮</span><span class="nav-label">نقطة البيع (F2)</span>
         </button>
 
         <div class="nav-group-label">العمليات اليومية</div>
-        <button class="navbtn" data-scr="customers" onclick="showScreen('customers')">
+        <button class="navbtn accountant-owner-only" data-scr="customers" aria-label="الزبائن والديون" onclick="showScreen('customers')">
           <span class="nav-icon">👥</span><span class="nav-label">الزبائن والديون</span>
         </button>
         <button class="navbtn" data-scr="inventory" onclick="showScreen('inventory')">
@@ -85,10 +85,10 @@
         <button class="navbtn" data-scr="suppliers" onclick="showScreen('suppliers')">
           <span class="nav-icon">🚚</span><span class="nav-label">الموردون والشراء</span>
         </button>
-        <button class="navbtn" data-scr="cashbox" onclick="showScreen('cashbox')">
+        <button class="navbtn accountant-owner-only" data-scr="cashbox" aria-label="صندوق النقدية" onclick="showScreen('cashbox')">
           <span class="nav-icon">💰</span><span class="nav-label">صندوق النقدية</span>
         </button>
-        <button class="navbtn" data-scr="reports" onclick="showScreen('reports')">
+        <button class="navbtn accountant-owner-only" data-scr="reports" aria-label="التقارير" onclick="showScreen('reports')">
           <span class="nav-icon">📈</span><span class="nav-label">التقارير والأرباح</span>
         </button>
 
@@ -427,14 +427,14 @@
             <div class="card-header">
               <h3><span>🚚</span> الموردون وفواتير الشراء</h3>
               <div style="display:flex;gap:8px;">
-                <button class="btn btn-secondary" onclick="openSupplierModal()">+ مورد جديد</button>
-                <button class="btn btn-primary" onclick="openPurchaseModal()">+ فاتورة شراء جديدة</button>
+                <button class="btn btn-secondary accountant-owner-only" onclick="openSupplierModal()">+ مورد جديد</button>
+                <button class="btn btn-primary accountant-owner-only" onclick="openPurchaseModal()">+ فاتورة شراء جديدة</button>
                 <button class="btn btn-danger" onclick="openSupplierReturnModal()">↩️ إرجاع للمورد</button>
               </div>
             </div>
             <div class="card-body">
               <div class="tbl-wrap">
-                <table>
+                <table id="suppliersTable">
                   <thead>
                     <tr><th>اسم المورد</th><th>الهاتف</th><th>رصيد المورد المستحق</th><th>الإجراءات</th></tr>
                   </thead>
@@ -558,23 +558,23 @@
             </div>
           </div>
 
-          <!-- Manual SQL Export/Import -->
+          <!-- Manual structured backup export/import -->
           <div class="grid2">
             <div class="card">
-              <div class="card-header"><h3><span>📦</span> تصدير ملف SQL كامل</h3></div>
+              <div class="card-header"><h3><span>📦</span> تصدير نسخة احتياطية</h3></div>
               <div class="card-body">
-                <p class="sub" style="margin-bottom:14px;">تنزيل نسخة نصية SQL حقيقية لكامل جداول وبيانات النظام يمكن حفظها على فلاشة أو قرص خارجي.</p>
-                <button class="btn btn-secondary" onclick="downloadSQLBackup()">⬇️ تنزيل نسخة SQL الآن</button>
+                <p class="sub" style="margin-bottom:14px;">تنزيل ملف JSON منظم يحتوي بيانات النظام لاستعادتها لاحقاً. يحتوي الملف بيانات تجارية وبيانات دخول؛ احفظه في مكان آمن.</p>
+                <button class="btn btn-secondary" onclick="downloadBackup()">⬇️ تنزيل النسخة الآن</button>
               </div>
             </div>
 
             <div class="card">
-              <div class="card-header"><h3><span>📥</span> استيراد قاعدة بيانات SQL</h3></div>
+              <div class="card-header"><h3><span>📥</span> استيراد نسخة احتياطية</h3></div>
               <div class="card-body">
-                <p class="sub" style="color:var(--danger-text);font-weight:700;margin-bottom:14px;">⚠️ تحذير: استيراد ملف SQL سيقوم باستبدال كامل البيانات الحالية للبرنامج بالبيانات المستوردة.</p>
+                <p class="sub" style="color:var(--danger-text);font-weight:700;margin-bottom:14px;">⚠️ استيراد نسخة JSON سيستبدل بيانات النظام. تُنشأ نسخة أمان تلقائياً قبل الاستيراد؛ احفظ الملف في مكان آمن.</p>
                 <label class="btn btn-danger" style="display:inline-flex;">
-                  <span>📂</span> اختيار واستيراد ملف SQL
-                  <input type="file" id="sqlImportFile" accept=".sql" style="display:none;" onchange="handleSqlImport(event)">
+                  <span>📂</span> اختيار واستيراد ملف JSON
+                  <input type="file" id="backupImportFile" accept=".json,application/json" style="display:none;" onchange="handleBackupImport(event)">
                 </label>
               </div>
             </div>
@@ -691,7 +691,7 @@
 </div>
 
 <!-- ═══ TOAST CONTAINER & MODAL ROOT ═══ -->
-<div class="toast-wrap" id="toastCont"></div>
+<div class="toast-wrap" id="toastCont" role="status" aria-live="polite" aria-atomic="false"></div>
 <div id="modalRoot"></div>
 
 <script src="/app.js"></script>

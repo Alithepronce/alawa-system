@@ -178,6 +178,7 @@
     n = Math.round((Number(n) || 0) * 100) / 100;
     return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
+  function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 
   function shareCurrentInvoiceWhatsApp() {
     if (!currentInvoiceData) return;
@@ -254,8 +255,8 @@ _ضمن منظومة زمام الذكية_`;
       } else {
         tbody.innerHTML = lines.map(l => `
           <tr>
-            <td><strong>${l.item_name}</strong></td>
-            <td class="num">${l.qty} ${l.unit}</td>
+            <td><strong>${escapeHTML(l.item_name)}</strong></td>
+            <td class="num">${fmtNum(l.qty)} ${escapeHTML(l.unit)}</td>
             <td class="num text-left">${fmtNum(l.price)}</td>
             <td class="num text-left"><strong>${fmtNum(l.total)}</strong></td>
           </tr>
@@ -268,7 +269,7 @@ _ضمن منظومة زمام الذكية_`;
       }, 400);
 
     } catch (err) {
-      document.body.innerHTML = '<div style="text-align:center;padding:20px;color:red;">حدث خطأ أثناء تحميل الفاتورة: ' + err.message + '</div>';
+      document.body.textContent = 'حدث خطأ أثناء تحميل الفاتورة: ' + err.message;
     }
   }
 

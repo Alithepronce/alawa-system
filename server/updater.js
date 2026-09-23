@@ -5,11 +5,14 @@ const https = require('node:https');
 const db = require('./db');
 const { HttpError, requireRole, logActivity } = require('./helpers');
 
-const APP_VERSION = require('../package.json').version || '2.0.0';
+// package.json stays inside app.asar in the desktop build, while this server
+// is unpacked so Electron can launch it as a separate process.
+const APP_VERSION = process.env.ALAWA_APP_VERSION || '2.0.0';
 const GITHUB_REPO = 'Alithepronce/alawa-system';
-const DB_PATH = path.join(__dirname, '..', 'data', 'alawa.db');
-const LICENSE_PATH = path.join(__dirname, '..', 'data', '.license');
-const PRE_UPDATE_DIR = path.join(__dirname, '..', 'data', 'pre_update_backups');
+const DATA_DIR = require('./data-path');
+const DB_PATH = path.join(DATA_DIR, 'alawa.db');
+const LICENSE_PATH = path.join(DATA_DIR, '.license');
+const PRE_UPDATE_DIR = path.join(DATA_DIR, 'pre_update_backups');
 
 /**
  * Execute WAL checkpoint and create an emergency verified pre-update backup.
@@ -182,7 +185,7 @@ function applyUpdate(ctx) {
       ok: true,
       backupFile: backup.backupFileName,
       currentVersion: APP_VERSION,
-      message: `تم التحقق بنجاح وإنشاء نسخة احتياطية مؤمنة (${backup.backupFileName}) قبل التحديث.`
+      message: `تم فحص البيانات وإنشاء نسخة أمان (${backup.backupFileName}). لم يُثبّت تحديث؛ نزّل المثبت الجديد من صفحة الإصدار.`
     }
   };
 }

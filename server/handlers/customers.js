@@ -1,38 +1,48 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requireAuth, requireRole, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requireAuth, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
 
 function listCustomers(ctx) {
-  requireAuth(ctx);
+  const session = requirePermission(ctx, 'customers.read');
   const includeDeleted = ctx.query && ctx.query.all === '1';
   const sql = includeDeleted
     ? 'SELECT * FROM customers ORDER BY name'
     : 'SELECT * FROM customers WHERE is_deleted = 0 ORDER BY name';
-  return { data: db.prepare(sql).all() };
+  const customers = db.prepare(sql).all();
+  if (session.role === 'أمين مخزن') return { data: customers.map(({ balance, credit_limit, category, ...customer }) => customer) };
+  return { data: customers };
 }
 function createCustomer(ctx) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.manage');
   const name = str(ctx.body.name);
   if (!name) throw new HttpError(400, 'أدخل اسم الزبون');
+  const category = str(ctx.body.category) || 'عادي';
+  const creditLimit = num(ctx.body.creditLimit);
+  if (!['عادي', 'جملة', 'مكاتب'].includes(category)) throw new HttpError(400, 'فئة الزبون غير صحيحة');
+  if (creditLimit < 0) throw new HttpError(400, 'سقف الدين لا يمكن أن يكون سالباً');
   const info = db.prepare(`
     INSERT INTO customers (name, nickname, phone, category, credit_limit, balance)
     VALUES (?,?,?,?,?,0)
-  `).run(name, str(ctx.body.nickname), str(ctx.body.phone), str(ctx.body.category) || 'عادي', num(ctx.body.creditLimit));
+  `).run(name, str(ctx.body.nickname), str(ctx.body.phone), category, creditLimit);
   logActivity(ctx, 'إضافة زبون', name);
   return { status: 201, data: { id: Number(info.lastInsertRowid) } };
 }
 function updateCustomer(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.manage');
   const c = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
   if (!c) throw new HttpError(404, 'الزبون غير موجود');
   const name = str(ctx.body.name) || c.name;
+  const category = str(ctx.body.category) || c.category;
+  const creditLimit = num(ctx.body.creditLimit, c.credit_limit);
+  if (!['عادي', 'جملة', 'مكاتب'].includes(category)) throw new HttpError(400, 'فئة الزبون غير صحيحة');
+  if (creditLimit < 0) throw new HttpError(400, 'سقف الدين لا يمكن أن يكون سالباً');
   db.prepare(`UPDATE customers SET name=?, nickname=?, phone=?, category=?, credit_limit=? WHERE id=?`)
-    .run(name, str(ctx.body.nickname), str(ctx.body.phone), str(ctx.body.category) || c.category, num(ctx.body.creditLimit, c.credit_limit), id);
+    .run(name, str(ctx.body.nickname), str(ctx.body.phone), category, creditLimit, id);
   logActivity(ctx, 'تعديل زبون', name);
   return { data: { ok: true } };
 }
 function deleteCustomer(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.manage');
   const c = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
   if (!c) throw new HttpError(404, 'الزبون غير موجود');
 
@@ -63,7 +73,7 @@ function deleteCustomer(ctx, id) {
   return { data: { ok: true } };
 }
 function customerPayment(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.finance');
   const c = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
   if (!c) throw new HttpError(404, 'الزبون غير موجود');
   const amount = num(ctx.body.amount);
@@ -83,7 +93,7 @@ function customerPayment(ctx, id) {
   return { data: { ok: true } };
 }
 function customerDebt(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.finance');
   const c = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
   if (!c) throw new HttpError(404, 'الزبون غير موجود');
   const amount = num(ctx.body.amount);
@@ -101,7 +111,7 @@ function customerDebt(ctx, id) {
   return { data: { ok: true } };
 }
 function customerLedger(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.ledger');
   const c = db.prepare('SELECT * FROM customers WHERE id=?').get(id);
   if (!c) throw new HttpError(404, 'الزبون غير موجود');
   const invoices = db.prepare('SELECT * FROM invoices WHERE customer_id=? AND voided=0 ORDER BY date').all(id);
@@ -130,9 +140,9 @@ function customerLedger(ctx, id) {
 }
 
 function customerLastPrices(ctx, id) {
-  requireAuth(ctx);
+  requirePermission(ctx, 'customers.ledger');
   const rows = db.prepare(`
-    SELECT il.item_id, il.item_name, il.unit_price, il.unit, i.date
+    SELECT il.item_id, il.item_name, il.price, il.unit, i.date
     FROM invoice_lines il
     JOIN invoices i ON il.invoice_id = i.id
     WHERE i.customer_id = ? AND i.voided = 0
@@ -143,7 +153,7 @@ function customerLastPrices(ctx, id) {
   for (const r of rows) {
     if (!priceMap[r.item_id]) {
       priceMap[r.item_id] = {
-        price: r.unit_price,
+        price: r.price,
         unit: r.unit,
         date: r.date,
         name: r.item_name

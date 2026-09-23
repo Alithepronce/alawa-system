@@ -1,0 +1,7 @@
+{
+  "name": "alawa-license-server",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": { "start": "node server.js", "create-key": "node create-key.js" },
+  "engines": { "node": ">=22.5.0" }
+}

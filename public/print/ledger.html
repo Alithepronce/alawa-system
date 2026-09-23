@@ -164,6 +164,7 @@
     n = Math.round((Number(n) || 0) * 100) / 100;
     return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
+  function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 
   async function loadLedger() {
     const params = new URLSearchParams(location.search);
@@ -198,9 +199,9 @@
         tbody.innerHTML = rows.map(r => `
           <tr>
             <td>${new Date(r.date).toLocaleDateString('ar-EG')}</td>
-            <td><strong>${r.desc}</strong></td>
-            <td>${r.material || '-'}</td>
-            <td>${r.qty || '-'}</td>
+            <td><strong>${escapeHTML(r.desc)}</strong></td>
+            <td>${escapeHTML(r.material || '-')}</td>
+            <td>${escapeHTML(r.qty || '-')}</td>
             <td class="num" style="text-align:left;">${r.debit ? fmtNum(r.debit) : '-'}</td>
             <td class="num" style="text-align:left;">${r.credit ? fmtNum(r.credit) : '-'}</td>
           </tr>
@@ -216,7 +217,7 @@
       }
 
     } catch (err) {
-      document.body.innerHTML = '<div style="text-align:center;padding:20px;color:red;">حدث خطأ: ' + err.message + '</div>';
+      document.body.textContent = 'حدث خطأ: ' + err.message;
     }
   }
 
