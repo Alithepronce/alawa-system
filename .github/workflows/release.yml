@@ -44,18 +44,41 @@ jobs:
             "X-GitHub-Api-Version" = "2022-11-28"
           }
           $releaseUrl = "https://api.github.com/repos/$repository/releases/tags/$tag"
-          $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers
-          $installer = Get-ChildItem -Path dist -Filter "AlawaSystem-Setup-*.exe" -File | Select-Object -First 1
-          $metadata = Get-Item -Path "dist/latest.yml" -ErrorAction SilentlyContinue
-          if (-not $installer -or -not $metadata) { throw "Installer or latest.yml was not produced in dist/." }
-          foreach ($file in @($installer, $metadata)) {
-            if ($release.assets.name -contains $file.Name) { continue }
-            $assetName = [uri]::EscapeDataString($file.Name)
+          try { $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers }
+          catch {
+            $releaseBody = @{ tag_name = $tag; name = "Alawa System $tag"; draft = $false; prerelease = $false } | ConvertTo-Json
+            $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$repository/releases" -Headers $headers -Body $releaseBody -ContentType "application/json"
+          }
+          $installer = Get-ChildItem -Path dist -File | Where-Object { $_.Name -like "*Setup*.exe" -and $_.Name -notlike "*uninstaller*" } | Select-Object -First 1
+          $blockmap = Get-ChildItem -Path dist -Filter "*.exe.blockmap" -File | Select-Object -First 1
+          if (-not $installer -or -not $blockmap) { throw "NSIS installer or blockmap was not produced in dist/." }
+          $assetInstaller = "AlawaSystem-Setup-$($tag.TrimStart('v')).exe"
+          $hash = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($installer.FullName)))
+          $metadata = @"
+          version: $($tag.TrimStart('v'))
+          files:
+            - url: $assetInstaller
+              sha512: $hash
+              size: $($installer.Length)
+          path: $assetInstaller
+          sha512: $hash
+          releaseDate: '$(Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fffZ" -AsUTC)'
+          "@
+          $metadataPath = Join-Path (Resolve-Path dist) "latest.yml"
+          [IO.File]::WriteAllText($metadataPath, $metadata, [Text.UTF8Encoding]::new($false))
+          $assetsToUpload = @(
+            @{ File = $installer; Name = $assetInstaller },
+            @{ File = $blockmap; Name = "$assetInstaller.blockmap" },
+            @{ File = Get-Item $metadataPath; Name = "latest.yml" }
+          )
+          foreach ($asset in $assetsToUpload) {
+            if ($release.assets.name -contains $asset.Name) { continue }
+            $assetName = [uri]::EscapeDataString($asset.Name)
             $uploadUrl = "https://uploads.github.com/repos/$repository/releases/$($release.id)/assets?name=$assetName"
-            Invoke-RestMethod -Method Post -Uri $uploadUrl -Headers $headers -InFile $file.FullName -ContentType "application/octet-stream" | Out-Null
+            Invoke-RestMethod -Method Post -Uri $uploadUrl -Headers $headers -InFile $asset.File.FullName -ContentType "application/octet-stream" | Out-Null
           }
           $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers
-          $required = @($installer.Name, $metadata.Name)
+          $required = @($assetInstaller, "$assetInstaller.blockmap", "latest.yml")
           foreach ($name in $required) {
             if ($release.assets.name -notcontains $name) { throw "Required release asset is missing: $name" }
           }
