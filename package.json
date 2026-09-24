@@ -1,12 +1,13 @@
 {
   "name": "alawa-management-system",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "نظام إدارة العلوة — نظام مالي ومحاسبي متكامل لسطح المكتب (Node.js + SQLite)",
   "author": "Alawa Management System",
   "main": "main.js",
   "scripts": {
     "start": "node server/server.js",
     "test": "node test_system.js",
+    "test:cashbox": "node test_cashbox_manual.js",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
     "release": "electron-builder --win --x64 --publish never",

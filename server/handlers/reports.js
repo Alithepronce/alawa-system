@@ -63,7 +63,7 @@ function weeklyReport(ctx) {
   const cash = db.prepare('SELECT * FROM cashbox').all().filter(c => inRange(c.date));
   const totalCashIn = cash.filter(c => c.type === 'in').reduce((s, c) => s + c.amount, 0);
   const totalCashOut = cash.filter(c => c.type === 'out').reduce((s, c) => s + c.amount, 0);
-  const manualExpense = cash.filter(c => c.type === 'out' && c.source === 'يدوي').reduce((s, c) => s + c.amount, 0);
+  const manualExpense = cash.filter(c => c.type === 'out' && ['يدوي', 'مصروف يدوي'].includes(c.source)).reduce((s, c) => s + c.amount, 0);
   const creditSales = invoices.reduce((s, i) => s + i.remaining, 0);
   const totalSales = invoices.reduce((s, i) => s + i.total, 0);
 

@@ -1565,7 +1565,7 @@ async function renderCashboxTable() {
 
   const directSales = list.filter(c => c.type === 'in' && c.source === 'بيع').reduce((s, c) => s + c.amount, 0);
   const collections = list.filter(c => c.type === 'in' && c.source === 'قبض من زبون').reduce((s, c) => s + c.amount, 0);
-  const internalExpenses = list.filter(c => c.type === 'out' && c.source === 'يدوي').reduce((s, c) => s + c.amount, 0);
+  const internalExpenses = list.filter(c => c.type === 'out' && ['يدوي', 'مصروف يدوي'].includes(c.source)).reduce((s, c) => s + c.amount, 0);
   const purchasesOut = list.filter(c => c.type === 'out' && (c.source === 'شراء' || c.source === 'تسديد لمورد')).reduce((s, c) => s + c.amount, 0);
   const totalIn = list.filter(c => c.type === 'in').reduce((s, c) => s + c.amount, 0);
   const totalOut = list.filter(c => c.type === 'out').reduce((s, c) => s + c.amount, 0);
@@ -1603,21 +1603,22 @@ function openCashModal() {
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">نوع الحركة</label>
-            <select class="form-control" id="cbType" onchange="toggleCbCustomer()">
-              <option value="in">داخل (قبض نقدي وارد)</option>
-              <option value="out">خارج (صرف / مصروفات)</option>
+            <label class="form-label">تصنيف الحركة</label>
+            <select class="form-control" id="cbKind" onchange="toggleCbCustomer()">
+              <option value="customer_receipt">قبض من زبون</option>
+              <option value="other_income">وارد آخر (ليس قبض زبون)</option>
+              <option value="expense">صرف / مصروف</option>
             </select>
           </div>
           <div class="form-group" id="cbCustField">
-            <label class="form-label">الزبون (اختياري)</label>
+            <label class="form-label">الزبون *</label>
             <select class="form-control" id="cbCustomer">
-              <option value="">-- بدون ارتباط بزبون --</option>
+              <option value="">-- اختر الزبون صاحب التسديد --</option>
               ${state.customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">المبلغ *</label><input type="number" class="form-control is-num" id="cbAmount" placeholder="0"></div>
-          <div class="form-group"><label class="form-label">البيان أو الوصف</label><input class="form-control" id="cbNote" placeholder="سبب الحركة"></div>
+          <div class="form-group"><label class="form-label" id="cbNoteLabel">ملاحظة (اختيارية)</label><input class="form-control" id="cbNote" placeholder="سبب الحركة أو رقم الوصل"></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -1629,17 +1630,24 @@ function openCashModal() {
 }
 
 function toggleCbCustomer() {
-  document.getElementById('cbCustField').style.display = document.getElementById('cbType').value === 'in' ? 'block' : 'none';
+  const kind = document.getElementById('cbKind').value;
+  const isCustomerReceipt = kind === 'customer_receipt';
+  document.getElementById('cbCustField').style.display = isCustomerReceipt ? 'block' : 'none';
+  document.getElementById('cbNoteLabel').textContent = isCustomerReceipt ? 'ملاحظة (اختيارية)' : 'سبب الحركة / البيان *';
 }
 
 async function saveCashManual() {
+  const kind = document.getElementById('cbKind').value;
   const customerId = document.getElementById('cbCustomer').value;
+  const note = document.getElementById('cbNote').value.trim();
+  if (kind === 'customer_receipt' && !customerId) return toast('اختر الزبون الذي سدّد المبلغ حتى يُحدّث رصيده.', 'err');
+  if (kind !== 'customer_receipt' && !note) return toast('اكتب سبب الحركة لتوثيقها في سجل الصندوق.', 'err');
   try {
     await api('POST', '/cashbox', {
-      type: document.getElementById('cbType').value,
+      kind,
       amount: document.getElementById('cbAmount').value,
-      note: document.getElementById('cbNote').value,
-      customerId: customerId || undefined
+      note,
+      customerId: kind === 'customer_receipt' ? customerId : undefined
     });
     closeModal();
     toast('تم تسجيل الحركة النقدية', 'ok');

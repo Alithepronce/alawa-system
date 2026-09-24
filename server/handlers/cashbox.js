@@ -13,19 +13,21 @@ function listCashbox(ctx) {
   return { data: db.prepare(sql).all(...params) };
 }
 
-// Manual cashbox entry. If a customerId is supplied with type='in', this is treated as a
-// real receipt against that customer's debt (not just an untracked generic cash movement).
+// Manual cash receipts must be explicitly classified. Customer receipts always require a
+// customer so the payment and balance update cannot be silently bypassed in the UI/API.
 function createCashboxManual(ctx) {
   const session = requirePermission(ctx, 'cashbox');
-  const type = str(ctx.body.type);
+  const kind = str(ctx.body.kind);
   const amount = num(ctx.body.amount);
   const note = str(ctx.body.note);
-  if (!['in','out'].includes(type)) throw new HttpError(400, 'نوع غير صحيح');
+  if (!['customer_receipt', 'other_income', 'expense'].includes(kind)) throw new HttpError(400, 'تصنيف الحركة غير صحيح');
   if (amount <= 0) throw new HttpError(400, 'أدخل مبلغاً صحيحاً');
   const date = nowISO();
 
-  if (type === 'in' && ctx.body.customerId) {
-    const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(ctx.body.customerId);
+  if (kind === 'customer_receipt') {
+    const customerId = Number(ctx.body.customerId);
+    if (!Number.isSafeInteger(customerId) || customerId <= 0) throw new HttpError(400, 'اختر الزبون الذي سدّد المبلغ');
+    const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(customerId);
     if (!customer) throw new HttpError(404, 'الزبون غير موجود');
     db.exec('BEGIN');
     try {
@@ -40,8 +42,14 @@ function createCashboxManual(ctx) {
     return { status: 201, data: { ok: true } };
   }
 
-  db.prepare('INSERT INTO cashbox (date, type, amount, source, note, created_by) VALUES (?,?,?,\'يدوي\',?,?)').run(date, type, amount, note, session.id);
-  logActivity(ctx, 'حركة صندوق يدوية', `${type === 'in' ? 'داخل' : 'خارج'}: ${amount}${note ? ' - ' + note : ''}`);
+  if (ctx.body.customerId !== undefined && ctx.body.customerId !== null && str(ctx.body.customerId) !== '') {
+    throw new HttpError(400, 'لا تربط الوارد الآخر أو المصروف بزبون؛ اختر تصنيف قبض من زبون لإثبات التسديد');
+  }
+  if (!note) throw new HttpError(400, 'سبب الحركة مطلوب لتوثيقها');
+  const type = kind === 'other_income' ? 'in' : 'out';
+  const source = kind === 'other_income' ? 'وارد آخر' : 'مصروف يدوي';
+  db.prepare('INSERT INTO cashbox (date, type, amount, source, note, created_by) VALUES (?,?,?,?,?,?)').run(date, type, amount, source, note, session.id);
+  logActivity(ctx, kind === 'other_income' ? 'وارد نقدي آخر' : 'مصروف نقدي يدوي', `${amount} - ${note}`);
   return { status: 201, data: { ok: true } };
 }
 
