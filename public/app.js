@@ -121,10 +121,11 @@ async function downloadLicenseRequest() {
   const error = document.getElementById('licenseError');
   button.disabled = true; error.textContent = ''; error.style.display = 'none';
   try {
-    const response = await api('GET', '/license/request');
-    const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+    const request = await api('GET', '/license/request');
+    if (!request || !request.requestId) throw new Error('استجابة طلب التفعيل غير مكتملة؛ أعد تشغيل البرنامج وحاول مرة أخرى.');
+    const blob = new Blob([JSON.stringify(request, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = `alawa-activation-${response.data.requestId}.json`;
+    anchor.href = url; anchor.download = `alawa-activation-${request.requestId}.json`;
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('تم حفظ طلب التفعيل. أرسله للمسؤول لإصدار ملف الترخيص.', 'ok');
   } catch (e) { error.textContent = e.message || 'تعذر إنشاء طلب التفعيل'; error.style.display = 'block'; }
