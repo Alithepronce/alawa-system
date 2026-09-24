@@ -17,6 +17,11 @@ let serverProc = null;
 let isQuitting = false;
 let backendReady = false;
 let updateDownloaded = false;
+let backendStopped = false;
+let quitFlowStarted = false;
+let closePromptOpen = false;
+let shutdownPromise = null;
+let backendRestartTimer = null;
 
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -38,6 +43,7 @@ ipcMain.handle('updates:check', async () => {
   const result = await autoUpdater.checkForUpdates();
   return { version: result?.updateInfo?.version || null };
 });
+ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('updates:download', async () => {
   if (!app.isPackaged || process.platform !== 'win32') throw new Error('التنزيل متاح في نسخة Windows المثبتة فقط');
   await autoUpdater.downloadUpdate();
@@ -45,9 +51,88 @@ ipcMain.handle('updates:download', async () => {
 });
 ipcMain.handle('updates:install', () => {
   if (!updateDownloaded) throw new Error('لم يكتمل تنزيل التحديث بعد');
-  autoUpdater.quitAndInstall(false, true);
-  return { ok: true };
+  return requestSafeQuit({ forUpdate: true }).then(ok => {
+    if (!ok) throw new Error('تعذر إغلاق قاعدة البيانات بأمان؛ أُوقف التحديث لحماية بياناتك.');
+    autoUpdater.quitAndInstall(false, true);
+    return { ok: true };
+  });
 });
+
+function stopBackendGracefully() {
+  const child = serverProc;
+  if (backendStopped || !child || child.exitCode !== null || child.signalCode) {
+    backendStopped = true;
+    return Promise.resolve({ ok: true });
+  }
+  if (shutdownPromise) return shutdownPromise;
+
+  shutdownPromise = new Promise(resolve => {
+    let settled = false;
+    let receivedCompletion = false;
+    const timer = setTimeout(() => {
+      try { if (child.exitCode === null) child.kill(); } catch (_) {}
+      finish({ ok: false, error: 'انتهت مهلة الإغلاق الآمن للخادم.' });
+    }, 15000);
+    timer.unref();
+
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (result.ok) backendStopped = true;
+      else shutdownPromise = null;
+      resolve(result);
+    };
+
+    child.on('message', message => {
+      if (message?.type === 'shutdown-complete') receivedCompletion = true;
+      if (message?.type === 'shutdown-failed') finish({ ok: false, error: message.error || 'فشلت النسخة الاحتياطية قبل الإغلاق.' });
+    });
+    child.once('exit', code => {
+      if (serverProc === child) serverProc = null;
+      if (receivedCompletion && code === 0) finish({ ok: true });
+      else finish({ ok: false, error: 'أُغلق خادم البيانات دون تأكيد اكتمال الحفظ والنسخة الاحتياطية.' });
+    });
+
+    if (!child.connected) {
+      try { child.kill(); } catch (_) {}
+      finish({ ok: false, error: 'تعذر التواصل مع خادم البيانات لإغلاقه بأمان.' });
+      return;
+    }
+    child.send({ type: 'shutdown' }, error => {
+      if (error) {
+        try { child.kill(); } catch (_) {}
+        finish({ ok: false, error: 'تعذر إرسال طلب الإغلاق الآمن لخادم البيانات.' });
+      }
+    });
+  });
+  return shutdownPromise;
+}
+
+async function requestSafeQuit({ forUpdate = false } = {}) {
+  if (quitFlowStarted) return backendStopped;
+  quitFlowStarted = true;
+  isQuitting = true;
+  if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null; }
+  const result = await stopBackendGracefully();
+  if (!result.ok) {
+    isQuitting = false;
+    quitFlowStarted = false;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    await dialog.showMessageBox(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
+      type: 'error',
+      title: 'تعذر الإغلاق الآمن',
+      message: 'لم يتم إغلاق البرنامج حتى الآن لحماية بياناتك.',
+      detail: `${result.error}\nتحقق من مساحة القرص ثم حاول الإغلاق مرة أخرى.` ,
+      buttons: ['حسنًا']
+    });
+    return false;
+  }
+  if (forUpdate) return true;
+  if (tray) { tray.destroy(); tray = null; }
+  app.quit();
+  return true;
+}
 
 // Enforce single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -116,8 +201,10 @@ function startBackendServer(onReady) {
         ALAWA_DATA_DIR: DATA_DIR,
         ALAWA_APP_VERSION: app.getVersion()
       },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc']
     });
+    backendStopped = false;
+    shutdownPromise = null;
 
     let ready = false;
     let startupFailed = false;
@@ -141,7 +228,10 @@ function startBackendServer(onReady) {
     serverProc.on('exit', (code) => {
       if (!isQuitting && !startupFailed) {
         console.warn(`Server exited with code ${code}. Restarting in 2 seconds...`);
-        setTimeout(() => startBackendServer(() => {}), 2000);
+        backendRestartTimer = setTimeout(() => {
+          backendRestartTimer = null;
+          if (!isQuitting) startBackendServer(() => {});
+        }, 2000);
       }
     });
 
@@ -168,7 +258,7 @@ function startBackendServer(onReady) {
         dialog.showErrorBox('تعذر تشغيل النظام', `لم يبدأ خادم البيانات خلال المهلة. راجع سجل التشغيل: ${LOG_FILE}`);
         if (serverProc && !serverProc.killed) serverProc.kill();
       }
-    }, 4000);
+    }, 20000);
   });
 }
 
@@ -202,11 +292,26 @@ function createMainWindow() {
     mainWindow.focus();
   });
 
-  // Handle close to hide or quit
+  // Ask explicitly whether to keep the tray process running or safely exit.
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
-      mainWindow.hide();
+      if (closePromptOpen) return;
+      closePromptOpen = true;
+      dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'إغلاق نظام العلوة',
+        message: 'هل تريد إغلاق البرنامج بالكامل؟',
+        detail: 'سيتم حفظ قاعدة البيانات وإنشاء نسخة احتياطية قبل الإغلاق. يمكنك اختيار الإخفاء لإبقائه يعمل في جوار الساعة.',
+        buttons: ['حفظ وإغلاق بأمان', 'إخفاء إلى جوار الساعة', 'إلغاء'],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true
+      }).then(({ response }) => {
+        closePromptOpen = false;
+        if (response === 0) requestSafeQuit();
+        else if (response === 1 && mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+      }).catch(() => { closePromptOpen = false; });
     }
   });
 
@@ -238,13 +343,11 @@ function setupTray() {
   tray.setToolTip('نظام إدارة العلوة');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'فتح النظام', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
+    { label: 'إخفاء إلى جوار الساعة', click: () => { if (mainWindow) mainWindow.hide(); } },
     { type: 'separator' },
     {
-      label: 'إغلاق البرنامج كلياً',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      }
+      label: 'حفظ وإغلاق البرنامج بأمان',
+      click: () => requestSafeQuit()
     }
   ]));
 
@@ -269,12 +372,19 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (serverProc && !backendStopped && serverProc.exitCode === null) {
+    event.preventDefault();
+    requestSafeQuit();
+    return;
+  }
   isQuitting = true;
-  if (serverProc) {
-    try {
-      serverProc.kill('SIGINT');
-    } catch (_) {}
+});
+
+app.on('session-end', () => {
+  isQuitting = true;
+  if (serverProc?.connected) {
+    try { serverProc.send({ type: 'shutdown' }); } catch (_) {}
   }
 });
 

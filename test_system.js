@@ -1,5 +1,7 @@
 'use strict';
 const db = require('./server/db');
+require('./server/migrations');
+db.prepare("INSERT OR IGNORE INTO users (id,name,role,password_hash,salt) VALUES (1,'مالك الاختبار','المالك','test','test')").run();
 const { getMachineFingerprint } = require('./server/machine');
 const { verifyLicense, initLicense } = require('./server/license');
 const autoBackup = require('./server/auto_backup');

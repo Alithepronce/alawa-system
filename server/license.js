@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
-const { getMachineFingerprint } = require('./machine');
+const { getMachineFingerprint, getLegacyMachineFingerprint } = require('./machine');
 const DATA_DIR = require('./data-path');
 const LICENSE_FILE = path.join(DATA_DIR, '.license.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'license-config.json');
@@ -12,7 +12,27 @@ const PUBLIC_KEY = fs.readFileSync(path.join(__dirname, 'license-public-key.pem'
 const PRODUCT = 'alawa-system';
 const GRACE_MS = 7 * 864e5;
 const read = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; } };
-const save = (f, v) => { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2)); };
+function save(f, value) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tempPath = `${f}.${process.pid}.${Date.now()}.tmp`;
+  let fd;
+  try {
+    fd = fs.openSync(tempPath, 'wx', 0o600);
+    fs.writeFileSync(fd, JSON.stringify(value, null, 2));
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tempPath, f);
+  } catch (error) {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) {} }
+    try { fs.rmSync(tempPath, { force: true }); } catch (_) {}
+    throw error;
+  }
+}
+function matchesCurrentDevice(token) {
+  const fingerprint = token?.fingerprint;
+  return fingerprint === getMachineFingerprint() || fingerprint === getLegacyMachineFingerprint();
+}
 function signed(record) {
   if (!record || typeof record.payload !== 'string' || typeof record.signature !== 'string') return null;
   if (!crypto.verify(null, Buffer.from(record.payload), PUBLIC_KEY, Buffer.from(record.signature, 'base64'))) return null;
@@ -22,7 +42,7 @@ function status() {
   const record = read(LICENSE_FILE); const token = signed(record);
   if (!token) return { valid: false, reason: 'NOT_ACTIVATED' };
   if (token.product === PRODUCT && token.licenseType === 'offline') {
-    if (token.fingerprint !== getMachineFingerprint()) return { valid: false, reason: 'DEVICE_MISMATCH' };
+    if (!matchesCurrentDevice(token)) return { valid: false, reason: 'DEVICE_MISMATCH' };
     if (token.expiresAt !== null) {
       const expiry = Date.parse(token.expiresAt);
       if (!Number.isFinite(expiry) || Date.now() > expiry) return { valid: false, reason: 'EXPIRED' };
@@ -31,7 +51,7 @@ function status() {
   }
 
   // Keep previously issued server licences working during their signed offline grace period.
-  if (token.fingerprint !== getMachineFingerprint()) return { valid: false, reason: 'DEVICE_MISMATCH' };
+  if (!matchesCurrentDevice(token)) return { valid: false, reason: 'DEVICE_MISMATCH' };
   const now = Date.now(), expiry = Date.parse(token.expiresAt), offlineUntil = Date.parse(token.offlineUntil);
   if (token.revoked || !Number.isFinite(expiry) || now > expiry) return { valid: false, reason: 'EXPIRED' };
   if (!Number.isFinite(offlineUntil) || now > offlineUntil) return { valid: false, reason: 'CHECK_REQUIRED' };

@@ -10,7 +10,7 @@ const auth = require('./auth');
 const api = require('./api');
 const license = require('./license');
 require('./migrations');
-require('./auto_backup');
+const autoBackup = require('./auto_backup');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.ALAWA_HOST || '127.0.0.1';
@@ -155,6 +155,44 @@ const server = http.createServer(async (req, res) => {
     sendJSON(res, 500, { error: 'خطأ داخلي في الخادم' });
   }
 });
+
+let shuttingDown = false;
+function sendProcessMessage(message, callback = () => {}) {
+  if (typeof process.send !== 'function') return callback();
+  try { process.send(message, callback); } catch (_) { callback(); }
+}
+
+function shutdownServer() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(error => {
+    if (error) {
+      shuttingDown = false;
+      return sendProcessMessage({ type: 'shutdown-failed', error: error.message });
+    }
+    try {
+      const backup = autoBackup.createBackup();
+      if (!backup) throw new Error('قاعدة البيانات غير موجودة لإنشاء نسخة احتياطية');
+      db.exec('PRAGMA wal_checkpoint(FULL);');
+      db.close();
+      sendProcessMessage({ type: 'shutdown-complete', backupFile: backup.filename }, () => process.exit(0));
+    } catch (shutdownError) {
+      // Keep the service available if the verified backup cannot be created.
+      server.listen(PORT, HOST, () => {
+        shuttingDown = false;
+        sendProcessMessage({ type: 'shutdown-failed', error: shutdownError.message });
+      });
+    }
+  });
+}
+
+if (typeof process.send === 'function') {
+  process.on('message', message => {
+    if (message?.type === 'shutdown') shutdownServer();
+  });
+}
+process.on('SIGINT', shutdownServer);
+process.on('SIGTERM', shutdownServer);
 
 function checkDatabaseIntegrity() {
   try {

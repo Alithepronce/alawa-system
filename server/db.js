@@ -13,7 +13,8 @@ const db = new DatabaseSync(DB_PATH);
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA busy_timeout = 5000;');
-db.exec('PRAGMA synchronous = NORMAL;');
+// Favor durable committed financial writes over maximum throughput.
+db.exec('PRAGMA synchronous = FULL;');
 db.exec('PRAGMA cache_size = -4096;');
 db.exec('PRAGMA temp_store = MEMORY;');
 

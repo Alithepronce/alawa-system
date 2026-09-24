@@ -2631,6 +2631,11 @@ updateClock();
 })();
 (async function boot() {
   window.electronAPI?.onUpdateStatus(renderUpdateStatus);
+  const versionPromise = window.electronAPI?.getAppVersion?.();
+  if (versionPromise) versionPromise.then(version => {
+    const versionLabel = document.getElementById('updaterCurrentVer');
+    if (versionLabel && version) versionLabel.textContent = `v${version}`;
+  }).catch(() => {});
   // Initialize stored theme
   const savedTheme = localStorage.getItem('alawa_theme');
   if (savedTheme === 'dark') {

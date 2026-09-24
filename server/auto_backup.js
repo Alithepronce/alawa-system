@@ -6,6 +6,7 @@ const db = require('./db');
 const DATA_DIR = require('./data-path');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_PATH = path.join(DATA_DIR, 'alawa.db');
+const LICENSE_PATH = path.join(DATA_DIR, '.license.json');
 const MAX_BACKUPS = 15;
 
 if (!fs.existsSync(BACKUP_DIR)) {
@@ -41,6 +42,8 @@ function cleanOldBackups() {
       const toDelete = files.slice(MAX_BACKUPS);
       for (const item of toDelete) {
         fs.unlinkSync(item.path);
+        const licenseCopy = item.path.replace(/\.db$/, '.license.json');
+        if (fs.existsSync(licenseCopy)) fs.unlinkSync(licenseCopy);
         console.log(`  Auto-backup: pruned old backup ${item.name}`);
       }
     }
@@ -50,6 +53,8 @@ function cleanOldBackups() {
 }
 
 function createBackup() {
+  let targetPath = null;
+  let licenseCopyPath = null;
   try {
     if (!fs.existsSync(DB_PATH)) return null;
 
@@ -59,9 +64,17 @@ function createBackup() {
     } catch (_) {}
 
     const filename = `alawa_backup_${getTimestamp()}.db`;
-    const targetPath = path.join(BACKUP_DIR, filename);
+    targetPath = path.join(BACKUP_DIR, filename);
+    licenseCopyPath = targetPath.replace(/\.db$/, '.license.json');
 
     fs.copyFileSync(DB_PATH, targetPath);
+    if (fs.existsSync(LICENSE_PATH)) fs.copyFileSync(LICENSE_PATH, licenseCopyPath);
+    const { DatabaseSync } = require('node:sqlite');
+    const backupDb = new DatabaseSync(targetPath, { readOnly: true });
+    let integrity;
+    try { integrity = backupDb.prepare('PRAGMA integrity_check;').get(); }
+    finally { backupDb.close(); }
+    if (!integrity || integrity.integrity_check !== 'ok') throw new Error('فشل فحص سلامة قاعدة بيانات النسخة الاحتياطية');
     const stats = fs.statSync(targetPath);
 
     cleanOldBackups();
@@ -72,6 +85,10 @@ function createBackup() {
       createdAt: new Date().toISOString()
     };
   } catch (err) {
+    try {
+      if (targetPath) fs.rmSync(targetPath, { force: true });
+      if (licenseCopyPath) fs.rmSync(licenseCopyPath, { force: true });
+    } catch (_) {}
     console.error('  Auto-backup error:', err);
     throw err;
   }

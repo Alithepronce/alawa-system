@@ -11,7 +11,7 @@ const APP_VERSION = process.env.ALAWA_APP_VERSION || '2.0.0';
 const GITHUB_REPO = 'Alithepronce/alawa-system';
 const DATA_DIR = require('./data-path');
 const DB_PATH = path.join(DATA_DIR, 'alawa.db');
-const LICENSE_PATH = path.join(DATA_DIR, '.license');
+const LICENSE_PATH = path.join(DATA_DIR, '.license.json');
 const PRE_UPDATE_DIR = path.join(DATA_DIR, 'pre_update_backups');
 
 /**
@@ -41,7 +41,7 @@ function createPreUpdateBackup() {
 
   // 3. Backup license if present
   if (fs.existsSync(LICENSE_PATH)) {
-    const licBackup = path.join(PRE_UPDATE_DIR, `.license_${stamp}`);
+    const licBackup = path.join(PRE_UPDATE_DIR, `${backupFileName}.license.json`);
     fs.copyFileSync(LICENSE_PATH, licBackup);
   }
 
