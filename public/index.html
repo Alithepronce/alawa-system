@@ -39,7 +39,7 @@
     </div>
     
     <div id="loginError" class="login-error" role="alert" aria-live="assertive"></div>
-    <button class="btn btn-primary" style="width:100%;padding:11px;font-size:14.5px;margin-top:4px;" onclick="doLogin()">تسجيل الدخول</button>
+    <button class="btn btn-primary" style="width:100%;padding:11px;font-size:17.5px;margin-top:4px;" onclick="doLogin()">تسجيل الدخول</button>
   </div>
 </div>
 
@@ -77,6 +77,9 @@
         <div class="nav-group-label">العمليات اليومية</div>
         <button class="navbtn accountant-owner-only" data-scr="customers" aria-label="الزبائن والديون" onclick="showScreen('customers')">
           <span class="nav-icon">👥</span><span class="nav-label">الزبائن والديون</span>
+        </button>
+        <button class="navbtn accountant-owner-only" data-scr="debtors" aria-label="المدانين والتجار" onclick="showScreen('debtors')">
+          <span class="nav-icon">📒</span><span class="nav-label">المدانين والتجار</span>
         </button>
         <button class="navbtn" data-scr="inventory" onclick="showScreen('inventory')">
           <span class="nav-icon">📦</span><span class="nav-label">المخزون والمواد</span>
@@ -142,7 +145,7 @@
               <span>⌨️</span> <span>F1</span>
             </button>
           </div>
-          <div id="topbarClock" class="num" style="font-size:13px;color:var(--text-secondary);padding:5px 10px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);"></div>
+          <div id="topbarClock" class="num" style="font-size:15.5px;color:var(--text-secondary);padding:5px 10px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);"></div>
         </div>
       </header>
 
@@ -151,19 +154,19 @@
         <div class="page-body">
           <div class="quick-actions-bar">
             <button class="action-card-btn" onclick="showScreen('pos')">
-              <span style="font-size:16px;">🧮</span> بيع جديد (F2)
+              <span style="font-size:19px;">🧮</span> بيع جديد (F2)
             </button>
             <button class="action-card-btn" onclick="showScreen('customers'); openCustomerModal();">
-              <span style="font-size:16px;">👤</span> زبون جديد
+              <span style="font-size:19px;">👤</span> زبون جديد
             </button>
             <button class="action-card-btn" onclick="showScreen('inventory'); openItemModal();">
-              <span style="font-size:16px;">📦</span> مادة جديدة
+              <span style="font-size:19px;">📦</span> مادة جديدة
             </button>
             <button class="action-card-btn" onclick="showScreen('cashbox'); openCashModal();">
-              <span style="font-size:16px;">💰</span> حركة صندوق
+              <span style="font-size:19px;">💰</span> حركة صندوق
             </button>
             <button class="action-card-btn" onclick="refreshDashboard()">
-              <span style="font-size:16px;">🔄</span> تحديث
+              <span style="font-size:19px;">🔄</span> تحديث
             </button>
           </div>
 
@@ -305,13 +308,13 @@
                   <div id="posPrevDebtBox" class="card" style="background:var(--bg-raised);padding:10px 14px;margin-bottom:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                       <span class="sub" id="posPrevDebtLbl">الدين السابق على الزبون</span>
-                      <strong class="num" id="posPrevDebt" style="font-size:16px;color:var(--text-heading);">0</strong>
+                      <strong class="num" id="posPrevDebt" style="font-size:19px;color:var(--text-heading);">0</strong>
                     </div>
                   </div>
 
                   <div class="form-group" style="margin-bottom:4px;">
                     <label class="form-label" for="posPaid">المبلغ الواصل (نقدياً)</label>
-                    <input type="number" class="form-control is-num" id="posPaid" placeholder="0" oninput="posRecalc()" style="font-size:16px;font-weight:700;">
+                    <input type="number" class="form-control is-num" id="posPaid" placeholder="0" oninput="posRecalc()" style="font-size:19px;font-weight:700;">
                   </div>
 
                   <div class="quick-cash-row">
@@ -326,11 +329,18 @@
                   <div class="grid2" style="margin-bottom:12px;">
                     <div>
                       <span class="sub">المتبقي (آجل)</span>
-                      <div class="num" id="posRemain" style="font-size:18px;font-weight:700;color:var(--danger-text);margin-top:2px;">0</div>
+                      <div class="num" id="posRemain" style="font-size:21.5px;font-weight:700;color:var(--danger-text);margin-top:2px;">0</div>
                     </div>
                     <div>
                       <label class="sub" for="posDueDate" style="display:block;margin-bottom:2px;">تاريخ الاستحقاق</label>
-                      <input type="date" class="form-control" id="posDueDate" style="padding:6px 8px;font-size:12px;">
+                      <input type="date" class="form-control" id="posDueDate" style="padding:6px 8px;font-size:14.5px;">
+                    </div>
+                  </div>
+
+                  <div class="card" style="background:var(--bg-raised);padding:10px 14px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                      <span class="sub">إجمالي دين الزبون بعد القائمة</span>
+                      <strong class="num" id="posDebtAfter" style="font-size:21.5px;color:var(--danger-text);">0</strong>
                     </div>
                   </div>
 
@@ -394,13 +404,55 @@
         </div>
       </section>
 
+      <!-- ─── SCREEN: DEBTORS ─── -->
+      <section class="screen" id="screen-debtors">
+        <div class="page-body">
+          <div class="grid2" style="margin-bottom:14px;">
+            <div class="stat-card"><div class="stat-label">مجموع ديوننا على الزبائن (لنا)</div><div class="stat-value num" id="debtorsTotalCust" style="color:var(--danger-text);">0</div></div>
+            <div class="stat-card"><div class="stat-label">مجموع ديون التجار والموردين (علينا)</div><div class="stat-value num" id="debtorsTotalSupp" style="color:var(--warning-text);">0</div></div>
+          </div>
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-header">
+              <h3><span>📒</span> المدانين — زبائن عليهم ديون</h3>
+              <button class="btn btn-secondary" onclick="window.print()">🖨️ طباعة</button>
+            </div>
+            <div class="card-body">
+              <div class="search-wrap no-print">
+                <input class="form-control" id="debtorsSearch" placeholder="ابحث بالاسم أو الهاتف..." oninput="renderDebtorsScreen()">
+                <span class="search-icon">🔍</span>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>#</th><th>الاسم</th><th>الهاتف</th><th>سقف الدين</th><th>الدين المستحق</th><th class="no-print">الإجراءات</th></tr></thead>
+                  <tbody id="debtorsCustBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3><span>🚚</span> التجار والموردون — مبالغ مستحقة لهم</h3></div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>#</th><th>الاسم</th><th>الهاتف</th><th>المبلغ المستحق له</th><th class="no-print">الإجراءات</th></tr></thead>
+                  <tbody id="debtorsSuppBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ─── SCREEN: INVENTORY ─── -->
       <section class="screen" id="screen-inventory">
         <div class="page-body">
           <div class="card">
             <div class="card-header">
               <h3><span>📦</span> إدارة المواد والمخزون والأسعار</h3>
-              <button class="btn btn-primary" onclick="openItemModal()">+ مادة جديدة</button>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-secondary" onclick="window.print()">🖨️ كشف المخزون</button>
+                <button class="btn btn-primary" onclick="openItemModal()">+ مادة جديدة</button>
+              </div>
             </div>
             <div class="card-body">
               <div class="search-wrap">
@@ -410,7 +462,7 @@
               <div class="tbl-wrap">
                 <table>
                   <thead>
-                    <tr><th>المادة</th><th>وزن الكيس</th><th>المخزون (كغم)</th><th>سعر الجملة</th><th>سعر المكاتب</th><th>سعر العادي</th><th>الباركود</th><th>الإجراءات</th></tr>
+                    <tr><th>المادة</th><th>وزن الكيس (كغم)</th><th>المخزون الكلي (كغم)</th><th>عدد الأكياس</th><th>كغم فائض</th><th>سعر الجملة</th><th>سعر المكاتب</th><th>سعر العادي</th><th>الباركود</th><th>الإجراءات</th></tr>
                   </thead>
                   <tbody id="inventoryTableBody"></tbody>
                 </table>
@@ -670,7 +722,7 @@
             <div class="card-body">
               <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);margin-bottom:14px;">
                 <div>
-                  <strong style="font-size:14px;display:block;">الإصدار الحالي المثبت: <span class="badge badge-sage" id="updaterCurrentVer">v2.0.0</span></strong>
+                  <strong style="font-size:17px;display:block;">الإصدار الحالي المثبت: <span class="badge badge-sage" id="updaterCurrentVer">v2.0.0</span></strong>
                   <span class="sub">يتم إجراء فحص سلامة ونسخ احتياطي كامل للبيانات قبل أي عملية ترقية</span>
                 </div>
                 <button class="btn btn-secondary" id="updaterCheckBtn" onclick="checkSystemUpdates()">

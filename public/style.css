@@ -47,9 +47,9 @@
 
   /* ─── TEXT PALETTE ─── */
   --text-heading:    #1E2D3D;
-  --text-body:       #334155;
-  --text-secondary:  #5A6A78;
-  --text-muted:      #8B9CA8;
+  --text-body:       #1E293B;
+  --text-secondary:  #3F4E5C;
+  --text-muted:      #64748B;
   --text-placeholder:#A2B1BE;
   --text-on-dark:    #F1F5F9;
   --text-on-accent:  #FFFFFF;
@@ -119,9 +119,9 @@
   --bg-subtle: #303E4F;   /* Hover states, row highlights */
 
   --text-heading:    #F8FAFC;
-  --text-body:       #CBD5E1;
-  --text-secondary:  #94A3B8;
-  --text-muted:      #64748B;
+  --text-body:       #E2E8F0;
+  --text-secondary:  #CBD5E1;
+  --text-muted:      #94A3B8;
   --text-placeholder:#475569;
 
   --border-subtle: #273442;
@@ -176,7 +176,8 @@ body {
   direction: rtl;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 13.5px;
+  font-size:16px;
+  font-weight: 500;
   line-height: 1.55;
   user-select: none;
 }
@@ -246,14 +247,14 @@ body {
 
 .login-card h1 {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size:25px;
   font-weight: 800;
   color: var(--text-heading);
   margin-bottom: 4px;
 }
 
 .login-card p {
-  font-size: 13px;
+  font-size:15.5px;
   color: var(--text-muted);
   margin-bottom: 26px;
 }
@@ -264,7 +265,7 @@ body {
   color: var(--danger-text);
   border-radius: var(--r-sm);
   padding: 10px 14px;
-  font-size: 12.5px;
+  font-size:15px;
   margin-bottom: 16px;
   display: none;
   text-align: right;
@@ -317,14 +318,14 @@ body {
 .sidebar-logo-text strong {
   display: block;
   color: var(--sidebar-title);
-  font-size: 14px;
+  font-size:17px;
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .sidebar-logo-text span {
-  font-size: 11px;
+  font-size:13px;
   color: var(--slate-300);
   display: block;
 }
@@ -336,7 +337,7 @@ body {
 }
 
 .nav-group-label {
-  font-size: 10.5px;
+  font-size:12.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--slate-500);
@@ -354,7 +355,7 @@ body {
   color: var(--sidebar-text);
   padding: 9.5px 12px;
   border-radius: var(--r-sm);
-  font-size: 13.5px;
+  font-size:16px;
   font-family: var(--font-display);
   font-weight: 500;
   text-align: right;
@@ -389,7 +390,7 @@ body {
 }
 
 .navbtn .nav-icon {
-  font-size: 16px;
+  font-size:19px;
   width: 22px;
   text-align: center;
   flex: 0 0 22px;
@@ -404,7 +405,7 @@ body {
   margin-right: auto;
   background: var(--terra-500);
   color: #fff;
-  font-size: 10px;
+  font-size:12px;
   padding: 2px 7px;
   border-radius: 20px;
   font-family: var(--font-mono);
@@ -434,7 +435,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size:17px;
   color: var(--sidebar-title);
   flex: 0 0 34px;
   font-family: var(--font-display);
@@ -445,12 +446,12 @@ body {
 .sidebar-user-info strong {
   display: block;
   color: var(--sidebar-title);
-  font-size: 13px;
+  font-size:15.5px;
   font-family: var(--font-display);
 }
 
 .sidebar-user-info span {
-  font-size: 11px;
+  font-size:13px;
   color: var(--slate-300);
   display: block;
 }
@@ -462,7 +463,7 @@ body {
   background: transparent;
   color: var(--slate-300);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 12.5px;
+  font-size:15px;
   font-family: var(--font-display);
   font-weight: 600;
   cursor: pointer;
@@ -515,13 +516,13 @@ body {
 
 .page-topbar-title h2 {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size:21.5px;
   font-weight: 800;
   color: var(--text-heading);
 }
 
 .page-topbar-title p {
-  font-size: 12px;
+  font-size:14.5px;
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -547,7 +548,7 @@ body {
   gap: 6px;
   padding: 8px 16px;
   border-radius: var(--r-sm);
-  font-size: 13px;
+  font-size:15.5px;
   font-family: var(--font-display);
   font-weight: 600;
   cursor: pointer;
@@ -621,13 +622,13 @@ body {
 
 .btn-sm, .btn.sm {
   padding: 5px 11px;
-  font-size: 11.5px;
+  font-size:14px;
   border-radius: var(--r-xs);
 }
 
 .btn-lg {
   padding: 12px 24px;
-  font-size: 15px;
+  font-size:18px;
 }
 
 .btn:active {
@@ -648,7 +649,7 @@ body {
 .form-label, label {
   display: block;
   margin-bottom: 5px;
-  font-size: 12px;
+  font-size:14.5px;
   font-weight: 700;
   color: var(--text-secondary);
   font-family: var(--font-display);
@@ -660,7 +661,7 @@ body {
   border: 1.5px solid var(--border-light);
   border-radius: var(--r-sm);
   font-family: var(--font-body);
-  font-size: 13.5px;
+  font-size:16px;
   color: var(--text-body);
   background: var(--bg-card);
   transition: var(--t-fast);
@@ -699,7 +700,7 @@ select.form-control, select {
   justify-content: space-between;
   background: var(--bg-raised);
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size:17px;
   font-weight: 700;
   color: var(--text-heading);
   margin: 0;
@@ -756,7 +757,7 @@ select.form-control, select {
 }
 
 .stat-label, .stat .lbl {
-  font-size: 11.5px;
+  font-size:14px;
   color: var(--text-muted);
   margin-bottom: 6px;
   font-family: var(--font-display);
@@ -765,14 +766,14 @@ select.form-control, select {
 
 .stat-value, .stat .val {
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size:26.5px;
   font-weight: 700;
   color: var(--text-heading);
   direction: ltr;
 }
 
 .stat-sub {
-  font-size: 11px;
+  font-size:13px;
   color: var(--text-muted);
   margin-top: 4px;
 }
@@ -787,7 +788,7 @@ select.form-control, select {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size:15.5px;
   background: var(--bg-card);
 }
 
@@ -796,7 +797,7 @@ thead th, th {
   color: var(--text-secondary);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11.5px;
+  font-size:14px;
   text-align: right;
   padding: 11px 14px;
   border-bottom: 1.5px solid var(--border-light);
@@ -833,7 +834,7 @@ tbody tr:last-child td {
   gap: 3px;
   padding: 3px 9px;
   border-radius: 20px;
-  font-size: 11px;
+  font-size:13px;
   font-weight: 700;
   font-family: var(--font-display);
   white-space: nowrap;
@@ -884,7 +885,7 @@ tbody tr:last-child td {
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size:17px;
   pointer-events: none;
 }
 
@@ -909,7 +910,7 @@ tbody tr:last-child td {
   text-align: right;
   display: block;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size:15.5px;
   cursor: pointer;
   transition: var(--t-fast);
 }
@@ -929,14 +930,14 @@ tbody tr:last-child td {
 }
 
 .pos-total-panel .ptotal-label {
-  font-size: 11.5px;
+  font-size:14px;
   color: var(--slate-300);
   margin-bottom: 4px;
 }
 
 .pos-total-panel .ptotal-value {
   font-family: var(--font-mono);
-  font-size: 26px;
+  font-size:31px;
   font-weight: 700;
   color: var(--sage-300);
   direction: ltr;
@@ -950,7 +951,7 @@ tbody tr:last-child td {
   color: #FFFFFF;
   border: none;
   border-radius: var(--r-md);
-  font-size: 15px;
+  font-size:18px;
   font-family: var(--font-display);
   font-weight: 800;
   cursor: pointer;
@@ -1009,7 +1010,7 @@ tbody tr:last-child td {
   justify-content: space-between;
   background: var(--bg-raised);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size:18px;
   font-weight: 800;
   color: var(--text-heading);
   margin: 0;
@@ -1022,7 +1023,7 @@ tbody tr:last-child td {
   background: transparent;
   border: 1px solid var(--border-light);
   cursor: pointer;
-  font-size: 13px;
+  font-size:15.5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1067,7 +1068,7 @@ tbody tr:last-child td {
   gap: 10px;
   padding: 11px 16px;
   border-radius: var(--r-sm);
-  font-size: 13px;
+  font-size:15.5px;
   font-family: var(--font-display);
   font-weight: 600;
   min-width: 220px;
@@ -1145,7 +1146,7 @@ tbody tr:last-child td {
   border: 1px solid var(--border-med);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size:12px;
   color: var(--text-secondary);
 }
 
@@ -1169,7 +1170,7 @@ tbody tr:last-child td {
 }
 
 .sub {
-  font-size: 12px;
+  font-size:14.5px;
   color: var(--text-secondary);
 }
 
@@ -1182,12 +1183,12 @@ tbody tr:last-child td {
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-xs);
   padding: 3px 8px;
-  font-size: 11px;
+  font-size:13px;
   font-weight: 600;
   color: var(--sage-600);
 }
 .zimam-pill-sidebar {
-  font-size: 10px;
+  font-size:12px;
   color: var(--slate-300);
   background: var(--slate-700);
   padding: 2px 6px;
@@ -1208,7 +1209,7 @@ tbody tr:last-child td {
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-sm);
   color: var(--text-body);
-  font-size: 12px;
+  font-size:14.5px;
   font-weight: 600;
   cursor: pointer;
   transition: var(--t-fast);
@@ -1228,7 +1229,7 @@ tbody tr:last-child td {
   border: 1px solid var(--border-light);
   border-radius: var(--r-sm);
   padding: 6px 12px;
-  font-size: 12px;
+  font-size:14.5px;
   font-weight: 700;
   cursor: pointer;
   color: var(--text-heading);
@@ -1241,7 +1242,7 @@ tbody tr:last-child td {
 .held-badge {
   background: var(--terra-500);
   color: #FFFFFF;
-  font-size: 11px;
+  font-size:13px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 10px;
@@ -1273,7 +1274,7 @@ tbody tr:last-child td {
 }
 .quick-cash-btn {
   padding: 3px 8px;
-  font-size: 11px;
+  font-size:13px;
   font-weight: 700;
   background: var(--bg-raised);
   border: 1px solid var(--border-light);
@@ -1303,7 +1304,7 @@ tbody tr:last-child td {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size:13px;
   background: var(--bg-raised);
   border: 1px dashed var(--border-med);
   color: var(--text-secondary);
@@ -1328,7 +1329,7 @@ tbody tr:last-child td {
   border: 1px solid var(--border-light);
   border-radius: var(--r-xs);
   padding: 3px 6px;
-  font-size: 12px;
+  font-size:14.5px;
   cursor: pointer;
   color: var(--text-secondary);
   line-height: 1;
@@ -1354,7 +1355,7 @@ tbody tr:last-child td {
 
 /* ═══ DUAL CURRENCY DISPLAY ═══ */
 .dual-currency-sub {
-  font-size: 12px;
+  font-size:14.5px;
   font-weight: 600;
   color: var(--text-secondary);
   margin-top: 3px;

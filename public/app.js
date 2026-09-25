@@ -158,8 +158,8 @@ function confirmDialog(title, message, confirmBtnText = 'نعم، تأكيد', i
             <button class="modal-close" onclick="closeModal();">✕</button>
           </div>
           <div class="modal-body" style="padding:24px 20px;text-align:center;">
-            <div style="font-size:36px;margin-bottom:12px;">${isDanger ? '⚠️' : '❓'}</div>
-            <p style="font-size:14px;color:var(--text-body);line-height:1.6;">${esc(message)}</p>
+            <div style="font-size:43px;margin-bottom:12px;">${isDanger ? '⚠️' : '❓'}</div>
+            <p style="font-size:17px;color:var(--text-body);line-height:1.6;">${esc(message)}</p>
           </div>
           <div class="modal-footer" style="justify-content:center;gap:12px;">
             <button class="btn btn-secondary" onclick="closeModal();">إلغاء</button>
@@ -249,7 +249,7 @@ function applyRolePermissions() {
   });
   document.querySelectorAll('.accountant-owner-only').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('.navbtn[data-scr="suppliers"]').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
-  document.querySelectorAll('#screen-inventory table thead th:nth-child(4), #screen-inventory table thead th:nth-child(5), #screen-inventory table thead th:nth-child(6)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-inventory table thead th:nth-child(6), #screen-inventory table thead th:nth-child(7), #screen-inventory table thead th:nth-child(8)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-suppliers table thead th:nth-child(3)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-suppliers .card-header button').forEach(el => { el.style.display = ''; });
 }
@@ -298,6 +298,7 @@ function updateLowStockBadge() {
 const SCREEN_TITLES = {
   dashboard: { title: 'لوحة المعلومات', sub: 'نظرة عامة على نشاط اليوم والمؤشرات المالية للمكتب' },
   pos: { title: 'نقطة البيع (POS)', sub: 'تسجيل قائمة بيع جديدة مع دعم الباركود والطباعة' },
+  debtors: { title: 'المدانين والتجار', sub: 'كل من عليه دين لنا، وكل تاجر أو مورد له مبلغ بذمتنا' },
   customers: { title: 'إدارة الزبائن', sub: 'دليل الزبائن، متابعة الديون، وتحديد سقوف الائتمان' },
   inventory: { title: 'المخزون والمواد', sub: 'إدارة أصناف الطحين والأعلاف، الأوزان، والأسعار' },
   suppliers: { title: 'الموردون والمشتريات', sub: 'فواتير الشراء، تكاليف النقل والتحميل، وأرصدة الموردين' },
@@ -330,6 +331,7 @@ function showScreen(name) {
   if (name === 'dashboard') renderDashboard();
   if (name === 'pos') renderPOS();
   if (name === 'customers') renderCustomersScreen();
+  if (name === 'debtors') renderDebtorsScreen();
   if (name === 'inventory') renderInventoryScreen();
   if (name === 'suppliers') renderSuppliersScreen();
   if (name === 'cashbox') renderCashboxScreen();
@@ -436,7 +438,7 @@ function posFilterCustomers() {
   box.innerHTML = res.map(c => `
     <div class="quick-item" onclick="posSelectCustomer(${c.id})">
       <span>👤 ${esc(c.name)} ${c.nickname ? `(${esc(c.nickname)})` : ''}</span>
-      <span class="num" style="float:left;font-size:12px;color:var(--text-secondary);">الرصيد: ${fmtNum(c.balance)}</span>
+      <span class="num" style="float:left;font-size:14.5px;color:var(--text-secondary);">الرصيد: ${fmtNum(c.balance)}</span>
     </div>
   `).join('') || '<div class="sub" style="padding:6px;">لا توجد نتائج مطابقة</div>';
 }
@@ -482,12 +484,12 @@ function posRenderCustSelected() {
 
   const isOver = c.balance > c.credit_limit;
   box.innerHTML = `
-    <div class="badge badge-sage" style="font-size:13px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;width:100%;">
+    <div class="badge badge-sage" style="font-size:15.5px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;width:100%;">
       <span>👤 <strong>${esc(c.name)}</strong> (${esc(c.category)})</span>
       <button class="btn btn-sm btn-secondary" onclick="posInvoice.customerId=null;customerLastPricesMap={};posRenderCustSelected();posRenderLines();">تغيير الزبون</button>
     </div>
     ${isOver ? `
-      <div style="margin-top:8px;padding:8px 12px;background:var(--danger-bg);color:var(--danger-text);border:1px solid var(--danger-border);border-radius:var(--r-xs);font-size:12px;font-weight:700;">
+      <div style="margin-top:8px;padding:8px 12px;background:var(--danger-bg);color:var(--danger-text);border:1px solid var(--danger-border);border-radius:var(--r-xs);font-size:14.5px;font-weight:700;">
         ⚠️ تحذير: رصيد الزبون (${fmtNum(c.balance)}) تجاوز سقف الدين المسموح (${fmtNum(c.credit_limit)})
       </div>
     ` : ''}
@@ -512,7 +514,7 @@ function posFilterItems() {
   box.innerHTML = res.map(i => `
     <div class="quick-item" onclick="posAddLine(${i.id})">
       <span style="font-weight:700;">📦 ${esc(i.name)}</span>
-      <span class="num" style="float:left;font-size:12px;">المخزون: ${fmtNum(i.stock_kg)} كغم</span>
+      <span class="num" style="float:left;font-size:14.5px;">المخزون: ${fmtNum(i.stock_kg)} كغم</span>
     </div>
   `).join('') || '<div class="sub" style="padding:6px;">لا توجد مواد مطابقة</div>';
 }
@@ -568,26 +570,26 @@ function posRenderLines() {
         <td><strong>${esc(item.name)}</strong></td>
         <td style="width:130px;">
           <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" class="form-control is-num" style="padding:4px 6px;font-size:13px;" value="${line.qty}" min="0.01" step="any" onchange="posUpdateLine(${idx}, 'qty', this.value)">
+            <input type="number" class="form-control is-num" style="padding:4px 6px;font-size:15.5px;" value="${line.qty}" min="0.01" step="any" onchange="posUpdateLine(${idx}, 'qty', this.value)">
             <button type="button" class="btn-calc" onclick="openBagsCalcModal(${idx})" title="حاسبة الصناديق والأكياس وطرح الفارغ (F9)">🧮</button>
           </div>
         </td>
         <td style="width:90px;">
-          <select class="form-control" style="padding:4px 6px;font-size:12px;" onchange="posUpdateLine(${idx}, 'unit', this.value)">
+          <select class="form-control" style="padding:4px 6px;font-size:14.5px;" onchange="posUpdateLine(${idx}, 'unit', this.value)">
             <option value="كيس" ${line.unit === 'كيس' ? 'selected' : ''}>كيس</option>
             <option value="كغم" ${line.unit === 'كغم' ? 'selected' : ''}>كغم</option>
             <option value="طن" ${line.unit === 'طن' ? 'selected' : ''}>طن</option>
           </select>
         </td>
         <td style="width:130px;">
-          <input type="number" class="form-control is-num" style="padding:4px 8px;font-size:13px;" value="${line.priceOverride}" min="0" step="any" onchange="posUpdateLine(${idx}, 'price', this.value)">
+          <input type="number" class="form-control is-num" style="padding:4px 8px;font-size:15.5px;" value="${line.priceOverride}" min="0" step="any" onchange="posUpdateLine(${idx}, 'price', this.value)">
           ${showPriceHint ? `
             <div class="last-price-chip" onclick="posApplyLastPrice(${idx}, ${lastP.price})" title="انقر لتطبيق آخر سعر بيع مسجل لهذا الزبون">
               📌 آخر بيع: ${fmtNum(lastP.price)}
             </div>
           ` : ''}
         </td>
-        <td class="num"><strong style="font-size:14px;">${fmtNum(total)}</strong></td>
+        <td class="num"><strong style="font-size:17px;">${fmtNum(total)}</strong></td>
         <td>
           <button class="btn btn-sm btn-danger" onclick="posRemoveLine(${idx})">✕</button>
         </td>
@@ -645,6 +647,7 @@ function posRecalc() {
   }
 
   const c = state.customers.find(x => x.id === posInvoice.customerId);
+  document.getElementById('posDebtAfter').textContent = fmtNum((c ? c.balance : 0) + remain);
   const overrideWrap = document.getElementById('posOverrideWrap');
   if (c && currentUser && currentUser.role !== 'المالك' && (c.balance + remain) > c.credit_limit) {
     overrideWrap.style.display = 'block';
@@ -714,7 +717,7 @@ function openBagsCalcModal(lineIdx) {
           </div>
           <div style="padding:14px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-light);text-align:center;margin-top:6px;">
             <div class="sub">الوزن الصافي الإجمالي المحسوب</div>
-            <div class="num" id="calcNetResult" style="font-size:24px;font-weight:800;color:var(--sage-600);margin-top:4px;">0 كغم</div>
+            <div class="num" id="calcNetResult" style="font-size:29px;font-weight:800;color:var(--sage-600);margin-top:4px;">0 كغم</div>
           </div>
         </div>
         <div class="modal-footer">
@@ -810,7 +813,7 @@ function openHeldInvoicesModal() {
           ${heldInvoices.map((h) => `
             <div class="held-card">
               <div>
-                <div style="font-weight:700;font-size:14px;color:var(--text-heading);">👤 ${esc(h.customerName)}</div>
+                <div style="font-weight:700;font-size:17px;color:var(--text-heading);">👤 ${esc(h.customerName)}</div>
                 <div class="sub" style="margin-top:2px;">
                   ⏰ علقت عند: ${h.savedAt} • ${h.lines.length} مواد • الإجمالي: <strong class="num">${fmtNum(h.total)}</strong> ${curr()}
                 </div>
@@ -941,8 +944,8 @@ function showInvoiceSuccessModal(invoiceId, customerId) {
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body" style="text-align:center;padding:20px 16px;">
-          <div style="font-size:38px;margin-bottom:8px;">🧾</div>
-          <div style="font-size:16px;font-weight:700;color:var(--text-heading);margin-bottom:4px;">فاتورة مبيعات رقم: #${invoiceId}</div>
+          <div style="font-size:45.5px;margin-bottom:8px;">🧾</div>
+          <div style="font-size:19px;font-weight:700;color:var(--text-heading);margin-bottom:4px;">فاتورة مبيعات رقم: #${invoiceId}</div>
           <div class="sub" style="margin-bottom:18px;">الزبون: <strong>${esc(cust ? cust.name : 'زبون عام')}</strong></div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <button class="btn btn-primary" style="padding:10px;" onclick="triggerPrintPrompt(${invoiceId})">
@@ -1033,6 +1036,10 @@ function openCustomerModal(id) {
               <input type="number" class="form-control is-num" id="cLimit" value="${c ? c.credit_limit : (state.settings.defCredit || 500000)}">
             </div>
           </div>
+          ${c ? '' : `<div class="form-group">
+            <label class="form-label">الديون السابقة (دين قديم على الزبون قبل استخدام النظام)</label>
+            <input type="number" min="0" class="form-control is-num" id="cOpeningDebt" placeholder="0">
+          </div>`}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -1049,7 +1056,8 @@ async function saveCustomer(id) {
     nickname: document.getElementById('cNick').value.trim(),
     phone: document.getElementById('cPhone').value.trim(),
     category: document.getElementById('cCat').value,
-    creditLimit: document.getElementById('cLimit').value
+    creditLimit: document.getElementById('cLimit').value,
+    openingDebt: document.getElementById('cOpeningDebt')?.value || 0
   };
   try {
     if (id) await api('PUT', `/customers/${id}`, body);
@@ -1115,6 +1123,7 @@ async function saveCustomerPayment(id) {
     closeModal();
     toast('تم تسجيل الدفعة وإيداعها في الصندوق', 'ok');
     await loadAllData();
+    if (document.getElementById('screen-debtors').classList.contains('active')) renderDebtorsScreen();
     renderCustomersScreen();
   } catch (e) {
     toast(e.message, 'err');
@@ -1160,8 +1169,55 @@ async function saveCustomerDebt(id) {
 }
 
 /* =========================================================
+   DEBTORS SCREEN
+========================================================= */
+async function renderDebtorsScreen() {
+  await loadAllData();
+  const q = document.getElementById('debtorsSearch').value.trim();
+  const match = x => !q || x.name.includes(q) || (x.phone || '').includes(q);
+  const custs = state.customers.filter(c => c.balance > 0.01 && match(c)).sort((a, b) => b.balance - a.balance);
+  const supps = state.suppliers.filter(s => s.balance > 0.01 && match(s)).sort((a, b) => b.balance - a.balance);
+
+  document.getElementById('debtorsTotalCust').textContent = fmtNum(custs.reduce((t, c) => t + c.balance, 0));
+  document.getElementById('debtorsTotalSupp').textContent = fmtNum(supps.reduce((t, s) => t + s.balance, 0));
+
+  document.getElementById('debtorsCustBody').innerHTML = custs.length ? custs.map((c, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td><strong>${esc(c.name)}</strong>${c.nickname ? ` <span class="sub">(${esc(c.nickname)})</span>` : ''}</td>
+      <td class="num">${esc(c.phone) || '-'}</td>
+      <td class="num">${fmtNum(c.credit_limit)}</td>
+      <td class="num"><span class="badge ${c.balance > c.credit_limit ? 'badge-danger' : 'badge-warning'}">${fmtNum(c.balance)}</span></td>
+      <td class="no-print" style="white-space:nowrap;">
+        <button class="btn btn-sm btn-secondary" onclick="openLedgerFor('customer', ${c.id})">كشف حساب</button>
+        <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id})">قبض</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">لا يوجد زبائن عليهم ديون</div></td></tr>';
+
+  document.getElementById('debtorsSuppBody').innerHTML = supps.length ? supps.map((s, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td><strong>${esc(s.name)}</strong></td>
+      <td class="num">${esc(s.phone) || '-'}</td>
+      <td class="num"><span class="badge badge-danger">${fmtNum(s.balance)}</span></td>
+      <td class="no-print" style="white-space:nowrap;">
+        <button class="btn btn-sm btn-secondary" onclick="openLedgerFor('supplier', ${s.id})">كشف حساب</button>
+        <button class="btn btn-sm btn-success" onclick="openSupplierPaymentModal(${s.id})">تسديد دفعة</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">لا توجد مبالغ مستحقة للتجار</div></td></tr>';
+}
+
+/* =========================================================
    INVENTORY SCREEN
 ========================================================= */
+// Whole weighed bags in stock plus the leftover loose kilograms.
+function stockInBags(item) {
+  const bagW = Number(item.bag_weight) || 1;
+  const stock = Math.max(Number(item.stock_kg) || 0, 0);
+  const bags = Math.floor((stock + 1e-6) / bagW);
+  return { bags, restKg: Math.max(stock - bags * bagW, 0) };
+}
+
 function renderInventoryScreen() {
   renderInventoryTable();
 }
@@ -1172,12 +1228,13 @@ function renderInventoryTable() {
   const body = document.getElementById('inventoryTableBody');
 
   if (list.length === 0) {
-    body.innerHTML = '<tr><td colspan="8"><div class="empty-state">لا توجد مواد مطابقة للبحث</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="10"><div class="empty-state">لا توجد مواد مطابقة للبحث</div></td></tr>';
     return;
   }
 
   body.innerHTML = list.map(i => {
     const low = i.stock_kg <= i.low_stock;
+    const { bags, restKg } = stockInBags(i);
     return `
       <tr>
         <td><strong>${esc(i.name)}</strong></td>
@@ -1187,6 +1244,8 @@ function renderInventoryTable() {
             ${fmtNum(i.stock_kg)}
           </span>
         </td>
+        <td class="num"><strong>${fmtNum(bags)}</strong> كيس</td>
+        <td class="num">${fmtNum(restKg)}</td>
         ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">${fmtNum(i.price_wholesale)}</td><td class="num">${fmtNum(i.price_office)}</td><td class="num">${fmtNum(i.price_normal)}</td>`}
         <td class="num">${esc(i.barcode) || '<span style="color:var(--text-muted);">-</span>'}</td>
         <td style="white-space:nowrap;">
@@ -1434,6 +1493,7 @@ async function saveSupplierPayment(id) {
     closeModal();
     toast('تم تسجيل التسديد وصرف المبلغ من الصندوق', 'ok');
     await loadAllData();
+    if (document.getElementById('screen-debtors').classList.contains('active')) renderDebtorsScreen();
     renderSuppliersScreen();
   } catch (e) {
     toast(e.message, 'err');
@@ -1475,7 +1535,7 @@ function openPurchaseModal() {
             <div class="form-group"><label class="form-label">أجور العمال والتحميل</label><input type="number" class="form-control is-num" id="pLoading" value="0" oninput="renderPurchaseLines()"></div>
           </div>
           <div class="form-group"><label class="form-label">المبلغ المدفوع كاش الآن</label><input type="number" class="form-control is-num" id="pPaid" value="0"></div>
-          <div style="font-size:16px;font-weight:700;margin:12px 0;">المجموع النهائي للفاتورة: <span class="num" id="pGrandTotal">0</span> ${curr()}</div>
+          <div style="font-size:19px;font-weight:700;margin:12px 0;">المجموع النهائي للفاتورة: <span class="num" id="pGrandTotal">0</span> ${curr()}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -1799,7 +1859,7 @@ async function renderLedgerReport() {
     </div>
     <div style="margin-top:14px;padding:12px 16px;background:var(--bg-raised);border-radius:var(--r-md);display:flex;justify-content:space-between;align-items:center;">
       <span style="font-weight:700;">${lbl}:</span>
-      <span class="num" style="font-size:20px;font-weight:700;color:var(--text-heading);">${fmtNum(Math.abs(balance))} ${curr()}</span>
+      <span class="num" style="font-size:24px;font-weight:700;color:var(--text-heading);">${fmtNum(Math.abs(balance))} ${curr()}</span>
     </div>
   `;
 }
@@ -2242,9 +2302,9 @@ function openCurrencyConverterModal() {
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="background:var(--bg-raised);padding:10px 14px;border-radius:var(--r-sm);border:1px solid var(--border-subtle);margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+          <div style="background:var(--bg-raised);padding:10px 14px;border-radius:var(--r-sm);border:1px solid var(--border-subtle);margin-bottom:14px;font-size:15.5px;display:flex;justify-content:space-between;align-items:center;">
             <span>سعر الصرف المعتمد (100$):</span>
-            <strong class="num" style="color:var(--text-heading);font-size:15px;">${fmtNum(rate * 100)} د.ع</strong>
+            <strong class="num" style="color:var(--text-heading);font-size:18px;">${fmtNum(rate * 100)} د.ع</strong>
           </div>
           <div class="form-group">
             <label class="form-label">المبلغ بالدولار الأمريكي ($)</label>
@@ -2345,7 +2405,9 @@ ${linesText || 'لا توجد تفاصيل مواد'}
 -------------------------
 💰 *المجموع الكلي:* ${fmtNum(inv.total)} د.ع
 💵 *الواصل (كاش):* ${fmtNum(inv.paid)} د.ع
-⏳ *المتبقي بذمة الزبون:* ${fmtNum(inv.remaining)} د.ع
+⏳ *المتبقي من القائمة:* ${fmtNum(inv.remaining)} د.ع
+📒 *الدين السابق:* ${fmtNum(inv.prev_debt)} د.ع
+🧾 *إجمالي الدين:* ${fmtNum(inv.prev_debt + inv.remaining)} د.ع
 -------------------------
 شكراً لتعاملكم معنا 🙏
 _ضمن منظومة زمام الذكية_`;
@@ -2412,15 +2474,23 @@ function openShortcutsModal() {
 /* =========================================================
    GitHub Releases auto-updater (Electron NSIS)
 ========================================================= */
+let updateInstallPrompted = false;
 function renderUpdateStatus(status) {
   const box = document.getElementById('updaterResultBox');
   if (!box || !status) return;
   box.style.display = 'block';
   const version = esc(status.version || '');
   if (status.state === 'checking') box.innerHTML = '<div role="status" aria-live="polite">جارٍ التحقق من إصدارات GitHub…</div>';
-  else if (status.state === 'available') { box.innerHTML = `<div style="font-weight:700">يتوفر إصدار ${version}</div><p class="sub">يمكن تنزيله الآن، وسيبقى الإصدار الحالي قيد الاستخدام حتى اكتمال التنزيل والنسخة الاحتياطية.</p><button class="btn btn-primary" onclick="downloadSystemUpdate()">تنزيل التحديث</button>`; toast(`يتوفر تحديث جديد ${version} — افتح شاشة الإعدادات لتنزيله`, 'info'); }
+  else if (status.state === 'available') { box.innerHTML = `<div style="font-weight:700">يتوفر إصدار ${version}</div><p class="sub">جارٍ تنزيله تلقائياً في الخلفية، ويبقى الإصدار الحالي قيد الاستخدام حتى التثبيت.</p>`; toast(`يتوفر تحديث جديد ${version} — جارٍ تنزيله تلقائياً`, 'info'); }
   else if (status.state === 'progress') box.innerHTML = `<div role="status" aria-live="polite">جارٍ تنزيل التحديث: ${Math.max(0,Math.min(100,Number(status.percent)||0))}%</div><progress max="100" value="${Math.max(0,Math.min(100,Number(status.percent)||0))}" style="width:100%"></progress>`;
-  else if (status.state === 'downloaded') box.innerHTML = `<div style="font-weight:700;color:var(--success-text)">اكتمل تنزيل الإصدار ${version}.</div><p class="sub">أنشئ نسخة أمان ثم وافق على إعادة تشغيل البرنامج لتثبيته.</p><button class="btn btn-primary" onclick="prepareAndInstallUpdate('${version}')">نسخ احتياطي وتثبيت</button>`;
+  else if (status.state === 'downloaded') {
+    box.innerHTML = `<div style="font-weight:700;color:var(--success-text)">اكتمل تنزيل الإصدار ${version}.</div><p class="sub">أنشئ نسخة أمان ثم وافق على إعادة تشغيل البرنامج لتثبيته.</p><button class="btn btn-primary" onclick="prepareAndInstallUpdate('${version}')">نسخ احتياطي وتثبيت</button>`;
+    if (!updateInstallPrompted) {
+      updateInstallPrompted = true;
+      if (currentUser?.role === 'المالك') prepareAndInstallUpdate(status.version || '');
+      else toast(`تحديث ${version} جاهز للتثبيت — يثبّته المالك من شاشة الإعدادات`, 'info');
+    }
+  }
   else if (status.state === 'not-available') box.innerHTML = '<div role="status" aria-live="polite" style="color:var(--success-text)">أنت تستخدم أحدث إصدار منشور.</div>';
   else if (status.state === 'error') box.innerHTML = `<div role="alert" style="color:var(--danger-text)">تعذر التحديث: ${esc(status.message || 'خطأ غير معروف')}</div>`;
 }
@@ -2446,9 +2516,9 @@ async function checkSystemUpdates() {
     if (res.hasUpdate) {
       box.innerHTML = `
         <div style="border-right:4px solid var(--terra-500);padding:10px 14px;background:var(--bg-raised);border-radius:var(--r-xs);margin-bottom:12px;">
-          <div style="font-weight:700;font-size:14px;color:var(--text-heading);">✨ يتوفر إصدار جديد: <strong>${esc(res.latestVersion)}</strong></div>
+          <div style="font-weight:700;font-size:17px;color:var(--text-heading);">✨ يتوفر إصدار جديد: <strong>${esc(res.latestVersion)}</strong></div>
           <div class="sub" style="margin-top:4px;">${esc(res.releaseName)} • تاريخ النشر: ${fmtDate(res.publishedAt)}</div>
-          <div style="margin-top:8px;font-size:13px;line-height:1.6;color:var(--text-body);background:var(--bg-card);padding:10px;border-radius:var(--r-xs);border:1px solid var(--border-subtle);">${esc(res.releaseNotes)}</div>
+          <div style="margin-top:8px;font-size:15.5px;line-height:1.6;color:var(--text-body);background:var(--bg-card);padding:10px;border-radius:var(--r-xs);border:1px solid var(--border-subtle);">${esc(res.releaseNotes)}</div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button class="btn btn-secondary" onclick="window.open('https://github.com/Alithepronce/alawa-system/releases/latest','_blank')">

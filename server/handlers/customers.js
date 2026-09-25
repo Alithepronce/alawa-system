@@ -20,12 +20,25 @@ function createCustomer(ctx) {
   const creditLimit = num(ctx.body.creditLimit);
   if (!['عادي', 'جملة', 'مكاتب'].includes(category)) throw new HttpError(400, 'فئة الزبون غير صحيحة');
   if (creditLimit < 0) throw new HttpError(400, 'سقف الدين لا يمكن أن يكون سالباً');
-  const info = db.prepare(`
-    INSERT INTO customers (name, nickname, phone, category, credit_limit, balance)
-    VALUES (?,?,?,?,?,0)
-  `).run(name, str(ctx.body.nickname), str(ctx.body.phone), category, creditLimit);
-  logActivity(ctx, 'إضافة زبون', name);
-  return { status: 201, data: { id: Number(info.lastInsertRowid) } };
+  // Debt carried over from before the system; recorded as a ledger 'debt' entry so the balance stays traceable.
+  const openingDebt = num(ctx.body.openingDebt);
+  if (openingDebt < 0) throw new HttpError(400, 'الديون السابقة لا يمكن أن تكون سالبة');
+  let id;
+  db.exec('BEGIN');
+  try {
+    const info = db.prepare(`
+      INSERT INTO customers (name, nickname, phone, category, credit_limit, balance)
+      VALUES (?,?,?,?,?,?)
+    `).run(name, str(ctx.body.nickname), str(ctx.body.phone), category, creditLimit, openingDebt);
+    id = Number(info.lastInsertRowid);
+    if (openingDebt > 0) {
+      db.prepare('INSERT INTO payments (customer_id, amount, date, note, type, created_by) VALUES (?,?,?,?,\'debt\',?)')
+        .run(id, openingDebt, nowISO(), 'ديون سابقة (رصيد افتتاحي)', ctx.session.id);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  logActivity(ctx, 'إضافة زبون', openingDebt > 0 ? `${name} — ديون سابقة ${openingDebt}` : name);
+  return { status: 201, data: { id } };
 }
 function updateCustomer(ctx, id) {
   requirePermission(ctx, 'customers.manage');

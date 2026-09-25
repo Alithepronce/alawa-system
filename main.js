@@ -23,7 +23,8 @@ let closePromptOpen = false;
 let shutdownPromise = null;
 let backendRestartTimer = null;
 
-autoUpdater.autoDownload = false;
+// Download new releases in the background; installing still requires the owner's approval after a backup.
+autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = false;
 
