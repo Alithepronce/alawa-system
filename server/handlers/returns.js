@@ -15,7 +15,7 @@ function createReturn(ctx) {
   const item = db.prepare('SELECT * FROM items WHERE id=?').get(itemId);
   if (!customer || !item) throw new HttpError(404, 'بيانات غير موجودة');
   const wKg = weightKg(qty, unit, item.bag_weight);
-  const sold = db.prepare(`SELECT COALESCE(SUM(weight_kg),0) AS kg, COALESCE(SUM(total),0) AS amount FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id WHERE i.customer_id=? AND il.item_id=? AND i.voided=0`).get(customerId, itemId);
+  const sold = db.prepare(`SELECT COALESCE(SUM(il.weight_kg),0) AS kg, COALESCE(SUM(il.total),0) AS amount FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id WHERE i.customer_id=? AND il.item_id=? AND i.voided=0`).get(customerId, itemId);
   const returned = db.prepare('SELECT COALESCE(SUM(weight_kg),0) AS kg, COALESCE(SUM(amount),0) AS amount FROM returns WHERE customer_id=? AND item_id=?').get(customerId, itemId);
   if (wKg > sold.kg - returned.kg + 0.001) throw new HttpError(400, 'كمية الإرجاع تتجاوز صافي ما اشتراه هذا الزبون من المادة');
   const amount = qty * price;

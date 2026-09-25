@@ -249,7 +249,7 @@ function applyRolePermissions() {
   });
   document.querySelectorAll('.accountant-owner-only').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('.navbtn[data-scr="suppliers"]').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
-  document.querySelectorAll('#screen-inventory table thead th:nth-child(6), #screen-inventory table thead th:nth-child(7), #screen-inventory table thead th:nth-child(8)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-inventory table thead th:nth-child(7), #screen-inventory table thead th:nth-child(8), #screen-inventory table thead th:nth-child(9)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-suppliers table thead th:nth-child(3)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-suppliers .card-header button').forEach(el => { el.style.display = ''; });
 }
@@ -298,6 +298,7 @@ function updateLowStockBadge() {
 const SCREEN_TITLES = {
   dashboard: { title: 'لوحة المعلومات', sub: 'نظرة عامة على نشاط اليوم والمؤشرات المالية للمكتب' },
   pos: { title: 'نقطة البيع (POS)', sub: 'تسجيل قائمة بيع جديدة مع دعم الباركود والطباعة' },
+  debtreports: { title: 'كشوفات الديون والمبيعات', sub: 'كشوف يومية وأسبوعية وشهرية وسنوية بتفاصيل كاملة مع الطباعة وحفظ PDF' },
   debtors: { title: 'المدانين والتجار', sub: 'كل من عليه دين لنا، وكل تاجر أو مورد له مبلغ بذمتنا' },
   customers: { title: 'إدارة الزبائن', sub: 'دليل الزبائن، متابعة الديون، وتحديد سقوف الائتمان' },
   inventory: { title: 'المخزون والمواد', sub: 'إدارة أصناف الطحين والأعلاف، الأوزان، والأسعار' },
@@ -332,6 +333,7 @@ function showScreen(name) {
   if (name === 'pos') renderPOS();
   if (name === 'customers') renderCustomersScreen();
   if (name === 'debtors') renderDebtorsScreen();
+  if (name === 'debtreports') renderDebtReportsScreen();
   if (name === 'inventory') renderInventoryScreen();
   if (name === 'suppliers') renderSuppliersScreen();
   if (name === 'cashbox') renderCashboxScreen();
@@ -496,7 +498,7 @@ function posRenderCustSelected() {
   `;
 
   if (c.balance < 0) {
-    lbl.textContent = 'رصيد دائن للزبون (له بذمتنا)';
+    lbl.textContent = 'رصيد إيداع الزبون (يُخصم منه الآجل تلقائياً)';
     val.textContent = fmtNum(Math.abs(c.balance));
     val.style.color = 'var(--success-text)';
   } else {
@@ -647,7 +649,13 @@ function posRecalc() {
   }
 
   const c = state.customers.find(x => x.id === posInvoice.customerId);
-  document.getElementById('posDebtAfter').textContent = fmtNum((c ? c.balance : 0) + remain);
+  const after = (c ? c.balance : 0) + remain;
+  const afterEl = document.getElementById('posDebtAfter');
+  afterEl.textContent = fmtNum(Math.abs(after));
+  afterEl.style.color = after < 0 ? 'var(--success-text)' : 'var(--danger-text)';
+  document.getElementById('posDebtAfterLbl').textContent = after < 0
+    ? 'المتبقي من إيداع الزبون بعد القائمة'
+    : (c && c.balance < 0 ? 'دين الزبون بعد استنفاد الإيداع' : 'إجمالي دين الزبون بعد القائمة');
   const overrideWrap = document.getElementById('posOverrideWrap');
   if (c && currentUser && currentUser.role !== 'المالك' && (c.balance + remain) > c.credit_limit) {
     overrideWrap.style.display = 'block';
@@ -991,13 +999,14 @@ function renderCustomersTable() {
         <td><span class="badge badge-slate">${esc(c.category)}</span></td>
         <td class="num">${fmtNum(c.credit_limit)}</td>
         <td class="num">
-          <span class="badge ${over ? 'badge-danger' : (c.balance > 0 ? 'badge-warning' : 'badge-sage')}">
-            ${fmtNum(c.balance)}
-          </span>
+          ${c.balance < -0.005
+            ? `<span class="badge badge-sage" title="مبلغ مودع مقدماً">إيداع ${fmtNum(-c.balance)}</span>`
+            : `<span class="badge ${over ? 'badge-danger' : (c.balance > 0 ? 'badge-warning' : 'badge-sage')}">${fmtNum(c.balance)}</span>`}
         </td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-sm btn-secondary" onclick="openLedgerFor('customer', ${c.id})">كشف حساب</button>
+          <button class="btn btn-sm btn-secondary" onclick="openStatementFor(${c.id})">كشف تفصيلي</button>
           <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id})">قبض</button>
+          <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id}, true)">إيداع</button>
           <button class="btn btn-sm btn-secondary" onclick="openDebtModal(${c.id})">دين</button>
           <button class="btn btn-sm btn-secondary" onclick="openCustomerModal(${c.id})">تعديل</button>
           <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">حذف</button>
@@ -1087,9 +1096,10 @@ async function deleteCustomer(id) {
   }
 }
 
-function openPaymentModal(id) {
+function openPaymentModal(id, deposit = false) {
   const c = state.customers.find(x => x.id === id);
   if (!c) return;
+  if (deposit) return openDepositModal(c);
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay">
       <div class="modal-box">
@@ -1114,14 +1124,42 @@ function openPaymentModal(id) {
   `;
 }
 
-async function saveCustomerPayment(id) {
+function openDepositModal(c) {
+  const held = c.balance < 0 ? -c.balance : 0;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>إيداع مبلغ مقدّم للزبون: ${esc(c.name)}</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="sub" style="margin-bottom:12px;">يُسجَّل المبلغ في الصندوق ويصبح رصيداً للزبون، وكل بضاعة يسحبها بالآجل تُخصم منه تلقائياً${c.balance > 0 ? '، بعد تسديد دينه الحالي أولاً' : ''}.</p>
+          <div class="grid2" style="margin-bottom:12px;">
+            <div class="stat-card" style="background:var(--bg-raised);"><div class="stat-label">الدين الحالي عليه</div><div class="stat-value" style="color:var(--danger-text);">${fmtNum(Math.max(c.balance, 0))}</div></div>
+            <div class="stat-card" style="background:var(--bg-raised);"><div class="stat-label">الإيداع المتوفر له</div><div class="stat-value" style="color:var(--success-text);">${fmtNum(held)}</div></div>
+          </div>
+          <div class="form-group"><label class="form-label" for="payAmount">مبلغ الإيداع *</label><input type="number" min="0" class="form-control is-num" id="payAmount" placeholder="0"></div>
+          <div class="form-group"><label class="form-label" for="payNote">ملاحظات</label><input class="form-control" id="payNote" placeholder="اختياري"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+          <button class="btn btn-success" onclick="saveCustomerPayment(${c.id}, true)">تسجيل الإيداع</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function saveCustomerPayment(id, deposit = false) {
   try {
     await api('POST', `/customers/${id}/payment`, {
       amount: document.getElementById('payAmount').value,
-      note: document.getElementById('payNote').value
+      note: document.getElementById('payNote').value,
+      deposit
     });
     closeModal();
-    toast('تم تسجيل الدفعة وإيداعها في الصندوق', 'ok');
+    toast(deposit ? 'تم تسجيل الإيداع وإضافته لرصيد الزبون' : 'تم تسجيل الدفعة وإيداعها في الصندوق', 'ok');
     await loadAllData();
     if (document.getElementById('screen-debtors').classList.contains('active')) renderDebtorsScreen();
     renderCustomersScreen();
@@ -1169,6 +1207,96 @@ async function saveCustomerDebt(id) {
 }
 
 /* =========================================================
+   DEBT & SALES REPORTS SCREEN
+========================================================= */
+let drPeriodKind = 'week';
+let drRenderSeq = 0;
+
+function renderDebtReportsScreen() {
+  if (!document.getElementById('drAnchor').value) document.getElementById('drAnchor').value = todayStr();
+  drFillCustomers();
+  if (!document.getElementById('drFrom').value) drSetPeriod(drPeriodKind);
+  else { drMarkPeriod(); renderDebtReport(); }
+}
+
+function drFillCustomers() {
+  const kind = document.getElementById('drKind').value;
+  const sel = document.getElementById('drCustomer');
+  const prev = sel.value;
+  document.getElementById('drCustomerWrap').style.visibility = kind === 'debts' ? 'hidden' : '';
+  sel.innerHTML = (kind === 'sales' ? '<option value="">كل الزبائن</option>' : '') +
+    state.customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+function drKindChanged() { drFillCustomers(); renderDebtReport(); }
+
+function drSetPeriod(kind) {
+  drPeriodKind = kind === 'custom' ? 'week' : kind;
+  const p = RPT.period(drPeriodKind, document.getElementById('drAnchor').value);
+  document.getElementById('drFrom').value = p.from;
+  document.getElementById('drTo').value = p.to;
+  drMarkPeriod();
+  renderDebtReport();
+}
+
+function drMarkPeriod() {
+  document.querySelectorAll('.dr-periods button').forEach(b => {
+    const on = b.dataset.p === drPeriodKind;
+    b.classList.toggle('btn-primary', on);
+    b.classList.toggle('btn-secondary', !on);
+    b.setAttribute('aria-pressed', on);
+  });
+}
+
+function drQuery() {
+  const kind = document.getElementById('drKind').value;
+  const from = document.getElementById('drFrom').value, to = document.getElementById('drTo').value;
+  const customerId = document.getElementById('drCustomer').value;
+  return { kind, from, to, customerId };
+}
+
+async function renderDebtReport() {
+  const out = document.getElementById('drOutput');
+  const { kind, from, to, customerId } = drQuery();
+  if (!from || !to) return;
+  const q = `from=${from}&to=${to}`;
+  const seq = ++drRenderSeq; // a slower earlier request must not overwrite a newer one
+  out.innerHTML = '<div class="rpt-empty">جارٍ إعداد الكشف...</div>';
+  let html;
+  try {
+    if (kind === 'statement') {
+      html = customerId ? RPT.statement(await api('GET', `/customers/${customerId}/statement?${q}`)) : '<div class="rpt-empty">اختر الزبون</div>';
+    } else if (kind === 'sales') {
+      html = RPT.sales(await api('GET', `/reports/customer-sales?${q}${customerId ? '&customerId=' + customerId : ''}`));
+    } else {
+      html = RPT.debts(await api('GET', `/reports/debts?${q}`));
+    }
+  } catch (e) {
+    html = `<div class="rpt-empty">${esc(e.message)}</div>`;
+  }
+  if (seq === drRenderSeq) out.innerHTML = html;
+}
+
+function openDebtReportPrint() {
+  const { kind, from, to, customerId } = drQuery();
+  if (kind === 'statement' && !customerId) { toast('اختر الزبون أولاً', 'err'); return; }
+  const params = new URLSearchParams({ kind, from, to });
+  if (kind === 'statement') params.set('id', customerId);
+  else if (kind === 'sales' && customerId) params.set('customerId', customerId);
+  const win = window.open(`/print/report.html?${params}`, 'ReportPrint', 'width=900,height=950,scrollbars=yes');
+  if (win) win.focus();
+}
+
+function openStatementFor(id, periodKind = 'month') {
+  showScreen('debtreports');
+  document.getElementById('drKind').value = 'statement';
+  drFillCustomers();
+  document.getElementById('drCustomer').value = id;
+  drSetPeriod(periodKind);
+}
+
+/* =========================================================
    DEBTORS SCREEN
 ========================================================= */
 async function renderDebtorsScreen() {
@@ -1189,10 +1317,24 @@ async function renderDebtorsScreen() {
       <td class="num">${fmtNum(c.credit_limit)}</td>
       <td class="num"><span class="badge ${c.balance > c.credit_limit ? 'badge-danger' : 'badge-warning'}">${fmtNum(c.balance)}</span></td>
       <td class="no-print" style="white-space:nowrap;">
-        <button class="btn btn-sm btn-secondary" onclick="openLedgerFor('customer', ${c.id})">كشف حساب</button>
+        <button class="btn btn-sm btn-secondary" onclick="openStatementFor(${c.id})">كشف تفصيلي</button>
         <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id})">قبض</button>
       </td>
     </tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">لا يوجد زبائن عليهم ديون</div></td></tr>';
+
+  const deps = state.customers.filter(c => c.balance < -0.005 && match(c)).sort((a, b) => a.balance - b.balance);
+  document.getElementById('debtorsTotalDep').textContent = fmtNum(deps.reduce((t, c) => t - c.balance, 0));
+  document.getElementById('debtorsDepBody').innerHTML = deps.length ? deps.map((c, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td class="num">${esc(c.phone) || '-'}</td>
+      <td class="num"><span class="badge badge-sage">${fmtNum(-c.balance)}</span></td>
+      <td class="no-print" style="white-space:nowrap;">
+        <button class="btn btn-sm btn-secondary" onclick="openStatementFor(${c.id})">كشف تفصيلي</button>
+        <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id}, true)">إيداع</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">لا توجد إيداعات مقدّمة للزبائن</div></td></tr>';
 
   document.getElementById('debtorsSuppBody').innerHTML = supps.length ? supps.map((s, i) => `
     <tr>
@@ -1228,7 +1370,7 @@ function renderInventoryTable() {
   const body = document.getElementById('inventoryTableBody');
 
   if (list.length === 0) {
-    body.innerHTML = '<tr><td colspan="10"><div class="empty-state">لا توجد مواد مطابقة للبحث</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="11"><div class="empty-state">لا توجد مواد مطابقة للبحث</div></td></tr>';
     return;
   }
 
@@ -1244,6 +1386,7 @@ function renderInventoryTable() {
             ${fmtNum(i.stock_kg)}
           </span>
         </td>
+        <td class="num">${fmtNum(i.stock_kg / 1000)}</td>
         <td class="num"><strong>${fmtNum(bags)}</strong> كيس</td>
         <td class="num">${fmtNum(restKg)}</td>
         ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">${fmtNum(i.price_wholesale)}</td><td class="num">${fmtNum(i.price_office)}</td><td class="num">${fmtNum(i.price_normal)}</td>`}
@@ -1518,15 +1661,22 @@ function openPurchaseModal() {
               ${state.suppliers.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
             </select>
           </div>
-          <div class="grid3">
-            <div class="form-group"><label class="form-label">المادة</label><select class="form-control" id="pItem">${state.items.map(i => `<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select></div>
-            <div class="form-group"><label class="form-label">الكمية (كغم)</label><input type="number" class="form-control is-num" id="pQty" value="0"></div>
-            <div class="form-group"><label class="form-label">سعر التكلفة للكيلو</label><input type="number" class="form-control is-num" id="pCostKg" value="0"></div>
+          <div class="grid2">
+            <div class="form-group"><label class="form-label" for="pItem">المادة</label><select class="form-control" id="pItem">${state.items.map(i => `<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select></div>
+            <div class="form-group"><label class="form-label" for="pUnit">وحدة الشراء</label>
+              <select class="form-control" id="pUnit" onchange="document.getElementById('pCostLbl').textContent = 'سعر التكلفة لكل ' + this.value">
+                <option value="طن">طن</option><option value="كغم">كغم</option><option value="كيس">كيس</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="form-group"><label class="form-label" for="pQty">الكمية</label><input type="number" class="form-control is-num" id="pQty" value="0"></div>
+            <div class="form-group"><label class="form-label" for="pCostKg" id="pCostLbl">سعر التكلفة لكل طن</label><input type="number" class="form-control is-num" id="pCostKg" value="0"></div>
           </div>
           <button class="btn btn-sm btn-secondary" style="margin-bottom:12px;" onclick="addPurchaseLine()">+ إضافة المادة للفاتورة</button>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>المادة</th><th>كغم</th><th>التكلفة/كغم</th><th>الإجمالي</th><th></th></tr></thead>
+              <thead><tr><th>المادة</th><th>الكمية</th><th>الوزن (كغم)</th><th>سعر الوحدة</th><th>الإجمالي</th><th></th></tr></thead>
               <tbody id="purchLinesBody"></tbody>
             </table>
           </div>
@@ -1548,10 +1698,14 @@ function openPurchaseModal() {
 
 function addPurchaseLine() {
   const itemId = parseInt(document.getElementById('pItem').value);
-  const qty = parseFloat(document.getElementById('pQty').value) || 0;
-  const cost = parseFloat(document.getElementById('pCostKg').value) || 0;
-  if (qty <= 0) { toast('يرجى إدخال كمية صحيحة', 'err'); return; }
-  purchaseLines.push({ itemId, qty, cost });
+  const unit = document.getElementById('pUnit').value;
+  const unitQty = parseFloat(document.getElementById('pQty').value) || 0;
+  const unitCost = parseFloat(document.getElementById('pCostKg').value) || 0;
+  if (unitQty <= 0) { toast('يرجى إدخال كمية صحيحة', 'err'); return; }
+  const item = state.items.find(i => i.id === itemId);
+  // The server stores purchases per kg; convert tons/bags here and keep the entered unit for display.
+  const kgPerUnit = unit === 'طن' ? 1000 : unit === 'كيس' ? (Number(item?.bag_weight) || 1) : 1;
+  purchaseLines.push({ itemId, qty: unitQty * kgPerUnit, cost: unitCost / kgPerUnit, unit, unitQty, unitCost });
   renderPurchaseLines();
 }
 
@@ -1565,8 +1719,9 @@ function renderPurchaseLines() {
     return `
       <tr>
         <td><strong>${esc(it ? it.name : '-')}</strong></td>
+        <td class="num">${fmtNum(l.unitQty ?? l.qty)} ${esc(l.unit || 'كغم')}</td>
         <td class="num">${fmtNum(l.qty)}</td>
-        <td class="num">${fmtNum(l.cost)}</td>
+        <td class="num">${fmtNum(l.unitCost ?? l.cost)}</td>
         <td class="num">${fmtNum(total)}</td>
         <td><button class="btn btn-sm btn-danger" onclick="purchaseLines.splice(${idx},1);renderPurchaseLines();">✕</button></td>
       </tr>
@@ -1728,7 +1883,7 @@ async function renderReportsScreen() {
       <div class="stat-card"><div class="stat-label">إجمالي مبيعات اليوم</div><div class="stat-value">${fmtNum(daily.totalSales)}</div></div>
       <div class="stat-card terra"><div class="stat-label">المبيعات الآجلة اليوم</div><div class="stat-value">${fmtNum(daily.creditSales)}</div></div>
       <div class="stat-card info"><div class="stat-label">عدد القوائم المسجلة</div><div class="stat-value">${daily.count}</div></div>
-      <div class="stat-card"><div class="stat-label">إجمالي الوزن المباع (كغم)</div><div class="stat-value">${fmtNum(daily.kg)}</div></div>
+      <div class="stat-card"><div class="stat-label">إجمالي الوزن المباع</div><div class="stat-value">${fmtNum(daily.kg)} كغم</div><div class="sub">${fmtNum(daily.kg / 1000)} طن</div></div>
     </div>
   `;
   document.getElementById('profitFrom').value = todayStr();
@@ -2406,8 +2561,8 @@ ${linesText || 'لا توجد تفاصيل مواد'}
 💰 *المجموع الكلي:* ${fmtNum(inv.total)} د.ع
 💵 *الواصل (كاش):* ${fmtNum(inv.paid)} د.ع
 ⏳ *المتبقي من القائمة:* ${fmtNum(inv.remaining)} د.ع
-📒 *الدين السابق:* ${fmtNum(inv.prev_debt)} د.ع
-🧾 *إجمالي الدين:* ${fmtNum(inv.prev_debt + inv.remaining)} د.ع
+📒 *${inv.prev_debt < 0 ? 'رصيد الإيداع السابق' : 'الدين السابق'}:* ${fmtNum(Math.abs(inv.prev_debt))} د.ع
+🧾 *${inv.prev_debt + inv.remaining < 0 ? 'المتبقي من الإيداع' : 'إجمالي الدين'}:* ${fmtNum(Math.abs(inv.prev_debt + inv.remaining))} د.ع
 -------------------------
 شكراً لتعاملكم معنا 🙏
 _ضمن منظومة زمام الذكية_`;

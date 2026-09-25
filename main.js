@@ -45,6 +45,21 @@ ipcMain.handle('updates:check', async () => {
   return { version: result?.updateInfo?.version || null };
 });
 ipcMain.handle('app:version', () => app.getVersion());
+// Save the calling window's page as an A4 PDF chosen by the user, then open it.
+ipcMain.handle('print:pdf', async (event, { fileName, landscape } = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const safeName = String(fileName || 'تقرير').replace(/[\\/:*?"<>|]/g, '-').slice(0, 120) + '.pdf';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'حفظ التقرير PDF',
+    defaultPath: path.join(app.getPath('documents'), safeName),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (canceled || !filePath) return { saved: false };
+  const pdf = await event.sender.printToPDF({ pageSize: 'A4', landscape: !!landscape, printBackground: true, margins: { marginType: 'default' } });
+  fs.writeFileSync(filePath, pdf);
+  shell.openPath(filePath);
+  return { saved: true, filePath };
+});
 ipcMain.handle('updates:download', async () => {
   if (!app.isPackaged || process.platform !== 'win32') throw new Error('التنزيل متاح في نسخة Windows المثبتة فقط');
   await autoUpdater.downloadUpdate();
@@ -320,7 +335,10 @@ function createMainWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const target = new URL(url);
-      if (target.origin === `http://127.0.0.1:${PORT}`) return { action: 'allow' };
+      if (target.origin === `http://127.0.0.1:${PORT}`) {
+        // Print/report windows need the same bridge (PDF saving) as the main window.
+        return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, devTools: !app.isPackaged } } };
+      }
       if (['https:', 'http:'].includes(target.protocol)) shell.openExternal(target.href);
     } catch (_) {}
     return { action: 'deny' };

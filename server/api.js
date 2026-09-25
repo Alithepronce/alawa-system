@@ -13,6 +13,7 @@ const reports = require('./handlers/reports');
 const backup = require('./handlers/backup');
 const updater = require('./updater');
 const license = require('./handlers/license');
+const debts = require('./handlers/debts');
 
 // Route table: [method, path pattern with :param placeholders, handler]
 const routes = [
@@ -71,6 +72,9 @@ const routes = [
   ['GET', '/api/reports/daily', (ctx) => reports.dailyReport(ctx)],
   ['GET', '/api/reports/profit', (ctx) => reports.profitReport(ctx)],
   ['GET', '/api/reports/weekly', (ctx) => reports.weeklyReport(ctx)],
+  ['GET', '/api/reports/debts', (ctx) => debts.debtsReport(ctx)],
+  ['GET', '/api/reports/customer-sales', (ctx) => debts.customerSalesReport(ctx)],
+  ['GET', '/api/customers/:id/statement', (ctx, id) => debts.customerStatement(ctx, id)],
   ['GET', '/api/activity-log', (ctx) => reports.activityLog(ctx)],
 
   ['GET',  '/api/backup/export', (ctx) => backup.exportBackup(ctx)],

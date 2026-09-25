@@ -92,17 +92,19 @@ function customerPayment(ctx, id) {
   const amount = num(ctx.body.amount);
   if (amount <= 0) throw new HttpError(400, 'أدخل مبلغاً صحيحاً');
   const note = str(ctx.body.note);
+  // A deposit is money paid in advance; it drives the balance below zero and later sales draw it down.
+  const deposit = ctx.body.deposit === true;
   const date = nowISO();
   db.exec('BEGIN');
   try {
-    db.prepare('INSERT INTO payments (customer_id, amount, date, note, type, created_by) VALUES (?,?,?,?,\'receipt\',?)')
-      .run(id, amount, date, note, ctx.session.id);
+    db.prepare('INSERT INTO payments (customer_id, amount, date, note, type, created_by, is_deposit) VALUES (?,?,?,?,\'receipt\',?,?)')
+      .run(id, amount, date, note, ctx.session.id, deposit ? 1 : 0);
     db.prepare('UPDATE customers SET balance = balance - ? WHERE id=?').run(amount, id);
-    db.prepare('INSERT INTO cashbox (date, type, amount, source, note, customer_name, created_by) VALUES (?,\'in\',?,\'قبض من زبون\',?,?,?)')
-      .run(date, amount, c.name + (note ? ' - ' + note : ''), c.name, ctx.session.id);
+    db.prepare('INSERT INTO cashbox (date, type, amount, source, note, customer_name, created_by) VALUES (?,\'in\',?,?,?,?,?)')
+      .run(date, amount, deposit ? 'إيداع زبون' : 'قبض من زبون', c.name + (note ? ' - ' + note : ''), c.name, ctx.session.id);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
-  logActivity(ctx, 'تسجيل قبض', `${c.name}: ${amount}`);
+  logActivity(ctx, deposit ? 'إيداع مبلغ مقدّم' : 'تسجيل قبض', `${c.name}: ${amount}`);
   return { data: { ok: true } };
 }
 function customerDebt(ctx, id) {
@@ -141,7 +143,7 @@ function customerLedger(ctx, id) {
   const payments = db.prepare('SELECT * FROM payments WHERE customer_id=? ORDER BY date').all(id);
   for (const p of payments) {
     if (p.type === 'debt') rows.push({ date: p.date, desc: 'إضافة دين' + (p.note ? ' - ' + p.note : ''), debit: p.amount, credit: 0 });
-    else rows.push({ date: p.date, desc: 'دفعة مقبوضة' + (p.note ? ' - ' + p.note : ''), debit: 0, credit: p.amount });
+    else rows.push({ date: p.date, desc: (p.is_deposit ? 'إيداع مبلغ مقدّم' : 'دفعة مقبوضة') + (p.note ? ' - ' + p.note : ''), debit: 0, credit: p.amount });
   }
   const returns = db.prepare('SELECT * FROM returns WHERE customer_id=? ORDER BY date').all(id);
   for (const r of returns) {

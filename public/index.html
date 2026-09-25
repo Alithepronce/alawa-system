@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Roboto+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/report.css">
 </head>
 <body>
 
@@ -80,6 +81,9 @@
         </button>
         <button class="navbtn accountant-owner-only" data-scr="debtors" aria-label="المدانين والتجار" onclick="showScreen('debtors')">
           <span class="nav-icon">📒</span><span class="nav-label">المدانين والتجار</span>
+        </button>
+        <button class="navbtn accountant-owner-only" data-scr="debtreports" aria-label="كشوفات الديون والمبيعات" onclick="showScreen('debtreports')">
+          <span class="nav-icon">🧾</span><span class="nav-label">كشوفات الديون والمبيعات</span>
         </button>
         <button class="navbtn" data-scr="inventory" onclick="showScreen('inventory')">
           <span class="nav-icon">📦</span><span class="nav-label">المخزون والمواد</span>
@@ -339,7 +343,7 @@
 
                   <div class="card" style="background:var(--bg-raised);padding:10px 14px;margin-bottom:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
-                      <span class="sub">إجمالي دين الزبون بعد القائمة</span>
+                      <span class="sub" id="posDebtAfterLbl">إجمالي دين الزبون بعد القائمة</span>
                       <strong class="num" id="posDebtAfter" style="font-size:21.5px;color:var(--danger-text);">0</strong>
                     </div>
                   </div>
@@ -411,6 +415,7 @@
             <div class="stat-card"><div class="stat-label">مجموع ديوننا على الزبائن (لنا)</div><div class="stat-value num" id="debtorsTotalCust" style="color:var(--danger-text);">0</div></div>
             <div class="stat-card"><div class="stat-label">مجموع ديون التجار والموردين (علينا)</div><div class="stat-value num" id="debtorsTotalSupp" style="color:var(--warning-text);">0</div></div>
           </div>
+          <div class="stat-card" style="margin-bottom:14px;"><div class="stat-label">مجموع إيداعات الزبائن المقدّمة (أمانات بذمتنا)</div><div class="stat-value num" id="debtorsTotalDep" style="color:var(--success-text);">0</div></div>
           <div class="card" style="margin-bottom:14px;">
             <div class="card-header">
               <h3><span>📒</span> المدانين — زبائن عليهم ديون</h3>
@@ -440,6 +445,57 @@
               </div>
             </div>
           </div>
+          <div class="card" style="margin-top:14px;">
+            <div class="card-header"><h3><span>💵</span> زبائن لديهم إيداع مقدّم (يسحبون بضاعة منه)</h3></div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>#</th><th>الاسم</th><th>الهاتف</th><th>الإيداع المتبقي</th><th class="no-print">الإجراءات</th></tr></thead>
+                  <tbody id="debtorsDepBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: DEBT & SALES REPORTS ─── -->
+      <section class="screen" id="screen-debtreports">
+        <div class="page-body">
+          <div class="card no-print">
+            <div class="card-body">
+              <div class="grid3" style="margin-bottom:10px;">
+                <div>
+                  <label class="form-label" for="drKind">نوع الكشف</label>
+                  <select class="form-control" id="drKind" onchange="drKindChanged()">
+                    <option value="statement">كشف حساب زبون تفصيلي</option>
+                    <option value="sales">قوائم البيع حسب الزبون</option>
+                    <option value="debts">تقرير الديون لكل الزبائن</option>
+                  </select>
+                </div>
+                <div id="drCustomerWrap">
+                  <label class="form-label" for="drCustomer">الزبون</label>
+                  <select class="form-control" id="drCustomer" onchange="renderDebtReport()"></select>
+                </div>
+                <div>
+                  <label class="form-label" for="drAnchor">اليوم المرجعي</label>
+                  <input type="date" class="form-control" id="drAnchor" onchange="drSetPeriod(drPeriodKind)">
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end;">
+                <div class="dr-periods" role="group" aria-label="الفترة" style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="btn btn-secondary" data-p="day" onclick="drSetPeriod('day')">يومي</button>
+                  <button class="btn btn-secondary" data-p="week" onclick="drSetPeriod('week')">أسبوعي</button>
+                  <button class="btn btn-secondary" data-p="month" onclick="drSetPeriod('month')">شهري</button>
+                  <button class="btn btn-secondary" data-p="year" onclick="drSetPeriod('year')">سنوي</button>
+                </div>
+                <div><label class="form-label" for="drFrom">من</label><input type="date" class="form-control" id="drFrom" onchange="drPeriodKind='custom';drMarkPeriod();renderDebtReport()"></div>
+                <div><label class="form-label" for="drTo">إلى</label><input type="date" class="form-control" id="drTo" onchange="drPeriodKind='custom';drMarkPeriod();renderDebtReport()"></div>
+                <button class="btn btn-primary" style="margin-inline-start:auto;" onclick="openDebtReportPrint()">📄 طباعة / حفظ PDF</button>
+              </div>
+            </div>
+          </div>
+          <div class="card"><div class="card-body"><div class="rpt" id="drOutput"></div></div></div>
         </div>
       </section>
 
@@ -462,7 +518,7 @@
               <div class="tbl-wrap">
                 <table>
                   <thead>
-                    <tr><th>المادة</th><th>وزن الكيس (كغم)</th><th>المخزون الكلي (كغم)</th><th>عدد الأكياس</th><th>كغم فائض</th><th>سعر الجملة</th><th>سعر المكاتب</th><th>سعر العادي</th><th>الباركود</th><th>الإجراءات</th></tr>
+                    <tr><th>المادة</th><th>وزن الكيس (كغم)</th><th>المخزون الكلي (كغم)</th><th>بالطن</th><th>عدد الأكياس</th><th>كغم فائض</th><th>سعر الجملة</th><th>سعر المكاتب</th><th>سعر العادي</th><th>الباركود</th><th>الإجراءات</th></tr>
                   </thead>
                   <tbody id="inventoryTableBody"></tbody>
                 </table>
@@ -746,6 +802,7 @@
 <div class="toast-wrap" id="toastCont" role="status" aria-live="polite" aria-atomic="false"></div>
 <div id="modalRoot"></div>
 
+<script src="/report-render.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

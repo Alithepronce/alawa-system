@@ -35,6 +35,7 @@ function runMigrations() {
   if (!suppCols.includes('deleted_at')) {
     db.exec('ALTER TABLE suppliers ADD COLUMN deleted_at TEXT;');
   }
+  if (!getColumns('payments').includes('is_deposit')) db.exec('ALTER TABLE payments ADD COLUMN is_deposit INTEGER NOT NULL DEFAULT 0;');
   const userCols = getColumns('users');
   if (!userCols.includes('must_change_password')) db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;');
   const auth = require('./auth');

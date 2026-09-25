@@ -1,0 +1,39 @@
+/* Report styles shared by the in-app report screen and print/report.html.
+   Colors fall back to print-safe values when the app theme variables are absent. */
+.rpt { color: var(--text-body, #111); }
+.rpt .n { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: plaintext; text-align: right; white-space: nowrap; }
+.rpt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.rpt-title { font-family: 'Cairo', sans-serif; font-size: 21px; font-weight: 800; color: var(--text-heading, #111); }
+.rpt-party { text-align: left; font-size: 18px; }
+.rpt-meta { font-size: 13.5px; color: var(--text-secondary, #444); }
+.rpt-sub { font-size: 12.5px; color: var(--text-secondary, #444); margin-top: 2px; }
+.rpt-ton { font-size: 0.85em; color: var(--text-secondary, #555); }
+.rpt-h { font-family: 'Cairo', sans-serif; font-size: 16px; margin: 16px 0 8px; color: var(--text-heading, #111); border-right: 4px solid var(--sage-500, #333); padding-right: 8px; }
+.rpt-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.rpt-card { border: 1px solid var(--border-light, #ccc); border-radius: 8px; padding: 8px 10px; background: var(--bg-card, #fff); }
+.rpt-card-l { font-size: 12.5px; color: var(--text-secondary, #444); }
+.rpt-card-v { font-size: 17px; font-weight: 700; color: var(--text-heading, #111); margin-top: 2px; }
+.rpt-c-debit { border-right: 4px solid var(--danger-text, #b91c1c); }
+.rpt-c-credit { border-right: 4px solid var(--success-text, #15803d); }
+.rpt-c-main { border-right: 4px solid var(--text-heading, #111); background: var(--bg-raised, #f4f4f4); }
+.rpt-c-dep { border-right: 4px solid var(--info-text, #1d4ed8); }
+.rpt-tbl { overflow-x: auto; margin-bottom: 8px; }
+.rpt table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.rpt th { background: var(--bg-raised, #eee); color: var(--text-heading, #111); font-weight: 700; padding: 7px 8px; border: 1px solid var(--border-light, #bbb); text-align: right; }
+.rpt td { padding: 6px 8px; border: 1px solid var(--border-subtle, #ccc); vertical-align: top; }
+.rpt tfoot td { font-weight: 800; background: var(--bg-raised, #f1f1f1); }
+.rpt-open td, .rpt-inv td { background: var(--bg-raised, #f6f6f6); }
+.rpt-ret td { color: var(--danger-text, #b91c1c); }
+.rpt-lines { font-size: 13px; margin-top: 4px; color: var(--text-body, #222); }
+.rpt-owe { color: var(--danger-text, #b91c1c); font-weight: 700; }
+.rpt-dep { color: var(--success-text, #15803d); font-weight: 700; }
+.rpt-zero { color: var(--text-muted, #777); }
+.rpt-empty { padding: 14px; text-align: center; color: var(--text-muted, #666); border: 1px dashed var(--border-light, #ccc); border-radius: 8px; }
+.rpt-group { border: 1px solid var(--border-light, #ccc); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; break-inside: avoid-page; }
+.rpt-group-h { display: flex; align-items: baseline; gap: 8px; font-size: 18px; margin-bottom: 4px; flex-wrap: wrap; }
+@media print {
+  .rpt table { font-size: 11.5px; }
+  .rpt-card-v { font-size: 14px; }
+  .rpt th, .rpt td { padding: 4px 5px; }
+  .rpt tr { break-inside: avoid; }
+}

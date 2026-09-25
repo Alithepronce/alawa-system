@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>تقرير</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/report.css">
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif; font-size: 12.5px; color: #111; background: #fff; margin: 0; padding: 14px; direction: rtl; }
+    .store { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1f2d3d; padding-bottom: 8px; margin-bottom: 12px; }
+    .store h1 { font-family: 'Cairo', sans-serif; font-size: 20px; margin: 0; }
+    .actions { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
+    .actions button { font-family: inherit; font-size: 15px; font-weight: 700; padding: 9px 18px; border-radius: 8px; border: 1px solid #1f2d3d; background: #1f2d3d; color: #fff; cursor: pointer; }
+    .actions button.alt { background: #fff; color: #1f2d3d; }
+    @media print { .actions { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button onclick="savePDF()">📄 حفظ PDF</button>
+    <button class="alt" onclick="window.print()">🖨️ طباعة</button>
+  </div>
+  <div class="store">
+    <div><h1 id="storeName">نظام إدارة العلوة</h1><div id="storePhone" class="rpt-meta"></div></div>
+    <div class="rpt-meta">تاريخ الطباعة: <span id="printedAt"></span></div>
+  </div>
+  <div class="rpt" id="report">جارٍ تحميل التقرير...</div>
+
+  <script src="/report-render.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const kind = params.get('kind');
+    let fileName = 'تقرير';
+
+    async function getJSON(url) {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'تعذر تحميل التقرير');
+      return data;
+    }
+
+    async function load() {
+      document.getElementById('printedAt').textContent = new Date().toLocaleString('en-GB');
+      const from = params.get('from'), to = params.get('to');
+      const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      try {
+        const settings = await getJSON('/api/settings');
+        document.getElementById('storeName').textContent = settings.storeName || 'نظام إدارة العلوة';
+        if (settings.storePhone) document.getElementById('storePhone').textContent = 'هاتف: ' + settings.storePhone;
+        let html;
+        if (kind === 'statement') {
+          const d = await getJSON(`/api/customers/${encodeURIComponent(params.get('id'))}/statement?${q}`);
+          html = RPT.statement(d);
+          fileName = `كشف حساب ${d.customer.name} ${from} - ${to}`;
+        } else if (kind === 'debts') {
+          html = RPT.debts(await getJSON(`/api/reports/debts?${q}`));
+          fileName = `تقرير الديون ${from} - ${to}`;
+        } else if (kind === 'sales') {
+          const cid = params.get('customerId');
+          html = RPT.sales(await getJSON(`/api/reports/customer-sales?${q}${cid ? '&customerId=' + encodeURIComponent(cid) : ''}`));
+          fileName = `قوائم البيع ${from} - ${to}`;
+        } else throw new Error('نوع التقرير غير معروف');
+        document.getElementById('report').innerHTML = html;
+        document.title = fileName;
+      } catch (e) {
+        document.getElementById('report').textContent = 'حدث خطأ: ' + e.message;
+      }
+    }
+
+    // Inside the desktop app save straight to a PDF file; in a browser fall back to the print dialog (Save as PDF).
+    async function savePDF() {
+      if (window.electronAPI?.savePDF) {
+        try { await window.electronAPI.savePDF({ fileName }); }
+        catch (e) { alert('تعذر حفظ PDF: ' + e.message); }
+      } else window.print();
+    }
+
+    load();
+  </script>
+</body>
+</html>

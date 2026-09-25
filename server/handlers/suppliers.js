@@ -97,7 +97,7 @@ function supplierLedger(ctx, id) {
     rows.push({
       date: p.date, desc: `فاتورة شراء #${p.id}`, debit: 0, credit: p.total,
       material: lines.map(l => { const it = db.prepare('SELECT name FROM items WHERE id=?').get(l.item_id); return it ? it.name : '-'; }).join('، '),
-      qty: lines.map(l => `${l.qty} كغم`).join('، ')
+      qty: lines.map(l => `${l.qty} كغم (${Math.round(l.qty / 10) / 100} طن)`).join('، ')
     });
   }
   const payments = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=? ORDER BY date').all(id);

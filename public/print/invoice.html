@@ -159,11 +159,11 @@
     <span class="num" id="invRemain">0</span>
   </div>
   <div class="total-row">
-    <span>الدين السابق:</span>
+    <span id="invPrevDebtLbl">الدين السابق:</span>
     <span class="num" id="invPrevDebt">0</span>
   </div>
   <div class="total-row grand">
-    <span>إجمالي الدين بذمة الزبون:</span>
+    <span id="invDebtTotalLbl">إجمالي الدين بذمة الزبون:</span>
     <span class="num" id="invDebtTotal">0</span>
   </div>
 </div>
@@ -206,8 +206,8 @@ ${linesText || 'لا توجد تفاصيل'}
 💰 *المجموع الكلي:* ${fmtNum(inv.total)} د.ع
 💵 *الواصل (كاش):* ${fmtNum(inv.paid)} د.ع
 ⏳ *المتبقي من القائمة:* ${fmtNum(inv.remaining)} د.ع
-📒 *الدين السابق:* ${fmtNum(inv.prev_debt)} د.ع
-🧾 *إجمالي الدين:* ${fmtNum(inv.prev_debt + inv.remaining)} د.ع
+📒 *${inv.prev_debt < 0 ? 'رصيد الإيداع السابق' : 'الدين السابق'}:* ${fmtNum(Math.abs(inv.prev_debt))} د.ع
+🧾 *${inv.prev_debt + inv.remaining < 0 ? 'المتبقي من الإيداع' : 'إجمالي الدين'}:* ${fmtNum(Math.abs(inv.prev_debt + inv.remaining))} د.ع
 -------------------------
 شكراً لتعاملكم معنا 🙏
 _ضمن منظومة زمام الذكية_`;
@@ -257,8 +257,12 @@ _ضمن منظومة زمام الذكية_`;
       document.getElementById('invTotal').textContent = fmtNum(inv.total);
       document.getElementById('invPaid').textContent = fmtNum(inv.paid);
       document.getElementById('invRemain').textContent = fmtNum(inv.remaining);
-      document.getElementById('invPrevDebt').textContent = fmtNum(inv.prev_debt);
-      document.getElementById('invDebtTotal').textContent = fmtNum(inv.prev_debt + inv.remaining);
+      // Negative balances are deposits the customer paid in advance.
+      const after = inv.prev_debt + inv.remaining;
+      document.getElementById('invPrevDebtLbl').textContent = inv.prev_debt < 0 ? 'رصيد الإيداع السابق (له):' : 'الدين السابق:';
+      document.getElementById('invPrevDebt').textContent = fmtNum(Math.abs(inv.prev_debt));
+      document.getElementById('invDebtTotalLbl').textContent = after < 0 ? 'المتبقي من الإيداع (له):' : 'إجمالي الدين بذمة الزبون:';
+      document.getElementById('invDebtTotal').textContent = fmtNum(Math.abs(after));
 
       const lines = inv.lines || [];
       const tbody = document.getElementById('linesBody');
