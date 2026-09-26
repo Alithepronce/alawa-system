@@ -61,6 +61,8 @@ function weeklyReport(ctx) {
 
   const invoices = db.prepare('SELECT * FROM invoices WHERE voided=0').all().filter(i => inRange(i.date));
   const cash = db.prepare('SELECT * FROM cashbox').all().filter(c => inRange(c.date));
+  const cashSales = cash.filter(c => c.type === 'in' && c.source === 'بيع').reduce((s, c) => s + c.amount, 0);
+  const collected = cash.filter(c => c.type === 'in' && ['قبض من زبون', 'إيداع زبون'].includes(c.source)).reduce((s, c) => s + c.amount, 0);
   const totalCashIn = cash.filter(c => c.type === 'in').reduce((s, c) => s + c.amount, 0);
   const totalCashOut = cash.filter(c => c.type === 'out').reduce((s, c) => s + c.amount, 0);
   const manualExpense = cash.filter(c => c.type === 'out' && ['يدوي', 'مصروف يدوي'].includes(c.source)).reduce((s, c) => s + c.amount, 0);
@@ -84,6 +86,8 @@ function weeklyReport(ctx) {
     data: {
       totalCashIn, totalCashOut, creditSales, totalSales,
       manualExpense, netCashFlow: totalCashIn - totalCashOut,
+      cashSales, collected, customerCashIn: cashSales + collected,
+      netAfterManual: cashSales + collected - manualExpense,
       customers
     }
   };

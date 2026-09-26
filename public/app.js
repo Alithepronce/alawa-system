@@ -222,6 +222,7 @@ async function afterLogin() {
   applyRolePermissions();
   await loadAllData();
   showScreen('dashboard');
+  refreshBackupBanner();
   if (currentUser.mustChangePassword) showMandatoryPasswordChange();
   if (window.electronAPI?.isElectron && !updateCheckScheduled) {
     updateCheckScheduled = true;
@@ -303,8 +304,9 @@ const SCREEN_TITLES = {
   customers: { title: 'إدارة الزبائن', sub: 'دليل الزبائن، متابعة الديون، وتحديد سقوف الائتمان' },
   inventory: { title: 'المخزون والمواد', sub: 'إدارة أصناف الطحين والأعلاف، الأوزان، والأسعار' },
   suppliers: { title: 'الموردون والمشتريات', sub: 'فواتير الشراء، تكاليف النقل والتحميل، وأرصدة الموردين' },
-  cashbox: { title: 'صندوق النقدية', sub: 'حركات السيولة النقدية الفعلية اليومية وتتبع المقبوضات' },
+  cashbox: { title: 'صندوق النقدية', sub: 'السيولة النقدية الفعلية الموجودة في الدرج فقط — منفصلة عن الأداء المالي' },
   reports: { title: 'التقارير والأرباح', sub: 'تحليل المبيعات اليومية، كشوف الحسابات، وأرباح المواد' },
+  weekly: { title: 'التقارير الأسبوعية', sub: 'ملخص مبيعات الأسبوع لكل زبون، مع طباعة مستقلة لقوائم كل زبون' },
   backup: { title: 'النسخ الاحتياطي والحماية', sub: 'نسخ احتياطية تلقائية ومحلية لحماية البيانات من التلف' },
   users: { title: 'المستخدمون والصلاحيات', sub: 'إدارة حسابات الدخول وتعيين الأدوار (محاسب، أمين مخزن، مالك)' },
   activitylog: { title: 'سجل العمليات والتدقيق', sub: 'سجل زمني لجميع عمليات البيع والقبض والحذف والتعديل' },
@@ -338,6 +340,7 @@ function showScreen(name) {
   if (name === 'suppliers') renderSuppliersScreen();
   if (name === 'cashbox') renderCashboxScreen();
   if (name === 'reports') renderReportsScreen();
+  if (name === 'weekly') renderWeeklyScreen();
   if (name === 'users') renderUsersScreen();
   if (name === 'backup') renderBackupScreen();
   if (name === 'activitylog') renderActivityLogScreen();
@@ -975,8 +978,26 @@ function showInvoiceSuccessModal(invoiceId, customerId) {
 /* =========================================================
    CUSTOMERS SCREEN
 ========================================================= */
+function customerCredit(c) {
+  return c.balance < -0.005 ? -c.balance : 0;
+}
+
 function renderCustomersScreen() {
+  renderCustomerStats();
   renderCustomersTable();
+}
+
+function renderCustomerStats() {
+  const list = state.customers;
+  const debts = list.reduce((s, c) => s + Math.max(c.balance, 0), 0);
+  const credit = list.reduce((s, c) => s + customerCredit(c), 0);
+  const overLimit = list.filter(c => c.credit_limit > 0 && c.balance > c.credit_limit).length;
+  document.getElementById('custStatsRow').innerHTML = `
+    <div class="stat-card info"><div class="stat-label">عدد الزبائن</div><div class="stat-value">${list.length}</div></div>
+    <div class="stat-card terra"><div class="stat-label">البيع بالآجل (ديون قائمة)</div><div class="stat-value">${fmtNum(debts)}</div></div>
+    <div class="stat-card"><div class="stat-label">إجمالي الرصيد الدائن للزبائن</div><div class="stat-value" style="color:var(--success-text);">${fmtNum(credit)}</div><div class="stat-sub">مبالغ دفعها الزبائن زيادة أو مقدّماً</div></div>
+    <div class="stat-card danger"><div class="stat-label">تجاوزوا سقف الدين</div><div class="stat-value" style="color:var(--danger-text);">${overLimit}</div></div>
+  `;
 }
 
 function renderCustomersTable() {
@@ -1000,13 +1021,13 @@ function renderCustomersTable() {
         <td class="num">${fmtNum(c.credit_limit)}</td>
         <td class="num">
           ${c.balance < -0.005
-            ? `<span class="badge badge-sage" title="مبلغ مودع مقدماً">إيداع ${fmtNum(-c.balance)}</span>`
+            ? `<span class="badge badge-sage" title="رصيد دائن للزبون">دائن ${fmtNum(-c.balance)}</span>`
             : `<span class="badge ${over ? 'badge-danger' : (c.balance > 0 ? 'badge-warning' : 'badge-sage')}">${fmtNum(c.balance)}</span>`}
         </td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm btn-secondary" onclick="openStatementFor(${c.id})">كشف تفصيلي</button>
           <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id})">قبض</button>
-          <button class="btn btn-sm btn-success" onclick="openPaymentModal(${c.id}, true)">إيداع</button>
+          <button class="btn btn-sm ${customerCredit(c) > 0 ? 'btn-success' : 'btn-secondary'}" onclick="openPaymentModal(${c.id}, true)" title="إيداع مبلغ مقدّم">💰 رصيد دائن: ${fmtNum(customerCredit(c))}</button>
           <button class="btn btn-sm btn-secondary" onclick="openDebtModal(${c.id})">دين</button>
           <button class="btn btn-sm btn-secondary" onclick="openCustomerModal(${c.id})">تعديل</button>
           <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">حذف</button>
@@ -1113,6 +1134,7 @@ function openPaymentModal(id, deposit = false) {
             <div class="stat-value" style="color:var(--danger-text);">${fmtNum(c.balance)} ${curr()}</div>
           </div>
           <div class="form-group"><label class="form-label">المبلغ المقبوض *</label><input type="number" class="form-control is-num" id="payAmount" placeholder="0"></div>
+          <p class="sub" style="margin-bottom:12px;">إذا زاد المبلغ عن الدين، يُحفظ الفرق رصيداً دائناً للزبون ويُخصم من مشترياته القادمة.</p>
           <div class="form-group"><label class="form-label">ملاحظات أو بيان القبض</label><input class="form-control" id="payNote" placeholder="اختياري"></div>
         </div>
         <div class="modal-footer">
@@ -1159,8 +1181,13 @@ async function saveCustomerPayment(id, deposit = false) {
       deposit
     });
     closeModal();
-    toast(deposit ? 'تم تسجيل الإيداع وإضافته لرصيد الزبون' : 'تم تسجيل الدفعة وإيداعها في الصندوق', 'ok');
+    const before = state.customers.find(x => x.id === id);
+    toast(deposit ? 'تم تسجيل الإيداع وإضافته لرصيد الزبون' : 'تم تسجيل القبض وإيداعه في الصندوق', 'ok');
     await loadAllData();
+    const after = state.customers.find(x => x.id === id);
+    if (!deposit && after && customerCredit(after) > (before ? customerCredit(before) : 0)) {
+      toast(`المبلغ أكبر من الدين؛ أصبح للزبون رصيد دائن ${fmtNum(customerCredit(after))}`, 'info');
+    }
     if (document.getElementById('screen-debtors').classList.contains('active')) renderDebtorsScreen();
     renderCustomersScreen();
   } catch (e) {
@@ -1776,20 +1803,21 @@ async function renderCashboxScreen() {
 
 async function renderCashboxTable() {
   const from = document.getElementById('cashFrom').value, to = document.getElementById('cashTo').value;
-  const list = await api('GET', `/cashbox?from=${from}&to=${to}`);
+  const q = `from=${from}&to=${to}`;
+  const [list, sm] = await Promise.all([api('GET', `/cashbox?${q}`), api('GET', `/cashbox/summary?${q}`)]);
 
-  const directSales = list.filter(c => c.type === 'in' && c.source === 'بيع').reduce((s, c) => s + c.amount, 0);
-  const collections = list.filter(c => c.type === 'in' && c.source === 'قبض من زبون').reduce((s, c) => s + c.amount, 0);
-  const internalExpenses = list.filter(c => c.type === 'out' && ['يدوي', 'مصروف يدوي'].includes(c.source)).reduce((s, c) => s + c.amount, 0);
-  const purchasesOut = list.filter(c => c.type === 'out' && (c.source === 'شراء' || c.source === 'تسديد لمورد')).reduce((s, c) => s + c.amount, 0);
-  const totalIn = list.filter(c => c.type === 'in').reduce((s, c) => s + c.amount, 0);
-  const totalOut = list.filter(c => c.type === 'out').reduce((s, c) => s + c.amount, 0);
-
-  document.getElementById('cashStatsRow').innerHTML = `
-    <div class="stat-card"><div class="stat-label">المقبوضات النقدية اليوم</div><div class="stat-value">${fmtNum(totalIn)}</div></div>
-    <div class="stat-card danger"><div class="stat-label">المدفوعات والمصروفات</div><div class="stat-value" style="color:var(--danger-text);">${fmtNum(totalOut)}</div></div>
-    <div class="stat-card info"><div class="stat-label">صافي حركة الصندوق</div><div class="stat-value">${fmtNum(totalIn - totalOut)}</div></div>
-  `;
+  const card = (cls, label, value, sub = '') => `<div class="stat-card ${cls}"><div class="stat-label">${label}</div><div class="stat-value">${fmtNum(value)}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ''}</div>`;
+  document.getElementById('cashStatsRow').innerHTML = [
+    card('', 'المبيعات النقدية المباشرة', sm.directSales),
+    card('terra', 'المبيعات الآجلة (بالدين)', sm.creditSales, 'للمقارنة فقط — غير محسوبة ضمن السيولة'),
+    card('', 'المقبوض من تسديد الديون والإيداعات', sm.collections),
+    card('', 'مرتجعات نقدية من الموردين', sm.supplierReturns),
+    sm.otherIncome ? card('', 'وارد آخر', sm.otherIncome) : '',
+    card('danger', 'المشتريات (شراء + تسديد لمورد)', sm.purchases),
+    card('danger', 'مرتجعات نقدية للزبائن', sm.customerReturns),
+    card('danger', 'نفقات تشغيلية داخلية', sm.expenses),
+    card('info', 'صافي الحركة النقدية', sm.net)
+  ].join('');
 
   const body = document.getElementById('cashboxTableBody');
   if (list.length === 0) {
@@ -1888,9 +1916,12 @@ async function renderReportsScreen() {
   `;
   document.getElementById('profitFrom').value = todayStr();
   document.getElementById('profitTo').value = todayStr();
+  fillLedgerSelect();
+}
+
+function renderWeeklyScreen() {
   if (!document.getElementById('weekFrom').value) setCurrentWeek();
   else renderWeeklyReport();
-  fillLedgerSelect();
 }
 
 function setCurrentWeek() {
@@ -1909,10 +1940,11 @@ async function renderWeeklyReport() {
   const from = document.getElementById('weekFrom').value, to = document.getElementById('weekTo').value;
   const r = await api('GET', `/reports/weekly?from=${from}&to=${to}`);
   document.getElementById('weeklyStatsRow').innerHTML = `
-    <div class="stat-card"><div class="stat-label">المبيعات الإجمالية</div><div class="stat-value">${fmtNum(r.totalSales)}</div></div>
-    <div class="stat-card terra"><div class="stat-label">البيع بالآجل</div><div class="stat-value">${fmtNum(r.creditSales)}</div></div>
-    <div class="stat-card info"><div class="stat-label">إجمالي المقبوضات الفعلية</div><div class="stat-value">${fmtNum(r.totalCashIn)}</div></div>
-    <div class="stat-card danger"><div class="stat-label">صافي حركة الصندوق بعد كل المدفوعات</div><div class="stat-value">${fmtNum(r.netCashFlow)}</div></div>
+    <div class="stat-card"><div class="stat-label">الكاش الداخل (مباشر + محصّل)</div><div class="stat-value">${fmtNum(r.customerCashIn)}</div><div class="stat-sub">مباشر ${fmtNum(r.cashSales)} + محصّل ${fmtNum(r.collected)}</div></div>
+    <div class="stat-card terra"><div class="stat-label">البيع الآجل خلال الأسبوع</div><div class="stat-value">${fmtNum(r.creditSales)}</div></div>
+    <div class="stat-card info"><div class="stat-label">إجمالي البيع (كاش + آجل)</div><div class="stat-value">${fmtNum(r.totalSales)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">المصروف بحركة يدوية</div><div class="stat-value" style="color:var(--danger-text);">${fmtNum(r.manualExpense)}</div></div>
+    <div class="stat-card info"><div class="stat-label">الصافي بعد الصرف اليدوي</div><div class="stat-value">${fmtNum(r.netAfterManual)}</div></div>
   `;
 
   const body = document.getElementById('weeklyCustomersBody');
@@ -1924,9 +1956,16 @@ async function renderWeeklyReport() {
         <td class="num">${fmtNum(c.total)}</td>
         <td class="num"><span class="badge badge-sage">${fmtNum(c.paid)}</span></td>
         <td class="num"><span class="badge ${c.remaining > 0 ? 'badge-danger' : 'badge-sage'}">${fmtNum(c.remaining)}</span></td>
+        <td><button class="btn btn-sm btn-secondary" onclick="printWeeklyCustomer(${c.customerId})">🖨️ طباعة</button></td>
       </tr>
     `).join('')
-    : '<tr><td colspan="5"><div class="empty-state">لا توجد مبيعات في هذه الفترة</div></td></tr>';
+    : '<tr><td colspan="6"><div class="empty-state">لا توجد مبيعات في هذه الفترة</div></td></tr>';
+}
+
+function printWeeklyCustomer(customerId) {
+  const params = new URLSearchParams({ kind: 'sales', from: document.getElementById('weekFrom').value, to: document.getElementById('weekTo').value, customerId });
+  const win = window.open(`/print/report.html?${params}`, 'ReportPrint', 'width=900,height=950,scrollbars=yes');
+  if (win) win.focus();
 }
 
 async function renderProfitReport() {
@@ -2211,6 +2250,7 @@ async function downloadBackup() {
     a.download = filename;
     a.click();
     toast('تم تنزيل النسخة الاحتياطية بنجاح', 'ok');
+    refreshBackupBanner();
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -2243,6 +2283,78 @@ async function handleBackupImport(ev) {
   };
   reader.readAsText(file);
   ev.target.value = '';
+}
+
+function saveTextFile(text, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function downloadSqlBackup() {
+  try {
+    const { sql, filename } = await api('GET', '/backup/export-sql');
+    saveTextFile(sql, filename, 'application/sql');
+    toast('تم تنزيل نسخة SQL بنجاح', 'ok');
+    refreshBackupBanner();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function handleSqlImport(ev) {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  const ok = await confirmDialog(
+    'استيراد نسخة SQL',
+    'سيتم استبدال جميع البيانات الحالية بمحتوى ملف SQL المختار. تُحفظ نسخة أمان تلقائياً قبل الاستيراد.',
+    'نعم، استيراد واستبدال البيانات'
+  );
+  if (!ok) return;
+  try {
+    const sql = await file.text();
+    await api('POST', '/backup/import-sql', { sql });
+    toast('تم استيراد نسخة SQL بنجاح — جارٍ إعادة تشغيل الواجهة', 'ok');
+    setTimeout(() => location.reload(), 1200);
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+/* OFF-DEVICE BACKUP WARNING BANNER */
+const BACKUP_STALE_DAYS = 7;
+const BACKUP_SNOOZE_KEY = 'alawa.backupBannerSnoozedUntil';
+
+async function refreshBackupBanner() {
+  const banner = document.getElementById('backupBanner');
+  if (!banner) return;
+  let snoozedUntil = 0;
+  try { snoozedUntil = Number(localStorage.getItem(BACKUP_SNOOZE_KEY)) || 0; } catch (_) {}
+  if (!currentUser || currentUser.role !== 'المالك' || Date.now() < snoozedUntil) { banner.style.display = 'none'; return; }
+  try {
+    const { lastExternalBackupAt } = await api('GET', '/backup/status');
+    const ageDays = lastExternalBackupAt ? (Date.now() - new Date(lastExternalBackupAt).getTime()) / 86400000 : Infinity;
+    if (ageDays < BACKUP_STALE_DAYS) { banner.style.display = 'none'; return; }
+    document.getElementById('backupBannerMsg').textContent = lastExternalBackupAt
+      ? `آخر نسخة احتياطية خارج الجهاز أُخذت قبل ${Math.floor(ageDays)} يوماً. بياناتك الجديدة محفوظة فقط على هذا الجهاز، وقد تُفقد إن تعطّل أو مُسح.`
+      : 'لم يتم أخذ أي نسخة احتياطية خارج الجهاز بعد! بياناتك محفوظة فقط على هذا الجهاز، وقد تُفقد نهائياً إن تعطّل أو مُسح.';
+    banner.style.display = '';
+  } catch (_) {
+    banner.style.display = 'none';
+  }
+}
+
+async function backupBannerTakeNow() {
+  await downloadBackup();
+  refreshBackupBanner();
+}
+
+function snoozeBackupBanner() {
+  try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now() + 24 * 3600 * 1000)); } catch (_) {}
+  document.getElementById('backupBanner').style.display = 'none';
 }
 
 /* GOOGLE DRIVE SYNC */
@@ -2313,6 +2425,7 @@ async function uploadBackupToDrive() {
     });
     if (!res.ok) throw new Error(await res.text());
     toast('تم رفع النسخة الاحتياطية إلى Google Drive بنجاح', 'ok');
+    refreshBackupBanner();
   } catch (e) {
     toast('فشل الرفع إلى Google Drive: ' + e.message, 'err');
   }

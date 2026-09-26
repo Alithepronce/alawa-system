@@ -11,6 +11,7 @@
     "test:shutdown": "node test_graceful_shutdown.js",
     "test:opening-debt": "node test_opening_debt.js",
     "test:debts": "node test_debts.js",
+    "test:features": "node test_features.js",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
     "release": "electron-builder --win --x64 --publish never",

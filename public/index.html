@@ -98,6 +98,9 @@
         <button class="navbtn accountant-owner-only" data-scr="reports" aria-label="التقارير" onclick="showScreen('reports')">
           <span class="nav-icon">📈</span><span class="nav-label">التقارير والأرباح</span>
         </button>
+        <button class="navbtn accountant-owner-only" data-scr="weekly" aria-label="التقارير الأسبوعية" onclick="showScreen('weekly')">
+          <span class="nav-icon">📅</span><span class="nav-label">التقارير الأسبوعية</span>
+        </button>
 
         <div class="nav-group-label owner-only">الإدارة والنظام</div>
         <button class="navbtn owner-only" data-scr="backup" onclick="showScreen('backup')">
@@ -152,6 +155,14 @@
           <div id="topbarClock" class="num" style="font-size:15.5px;color:var(--text-secondary);padding:5px 10px;background:var(--bg-raised);border-radius:var(--r-sm);border:1px solid var(--border-subtle);"></div>
         </div>
       </header>
+
+      <div class="backup-banner" id="backupBanner" role="alert" style="display:none;">
+        <span class="backup-banner-text">⚠️ <span id="backupBannerMsg"></span></span>
+        <span class="backup-banner-actions">
+          <button class="btn btn-sm btn-primary" onclick="backupBannerTakeNow()">💾 أخذ نسخة الآن</button>
+          <button class="btn btn-sm btn-secondary" onclick="snoozeBackupBanner()">ذكّرني لاحقاً</button>
+        </span>
+      </div>
 
       <!-- ─── SCREEN: DASHBOARD ─── -->
       <section class="screen active" id="screen-dashboard">
@@ -385,6 +396,7 @@
       <!-- ─── SCREEN: CUSTOMERS ─── -->
       <section class="screen" id="screen-customers">
         <div class="page-body">
+          <div class="stats-row" id="custStatsRow"></div>
           <div class="card">
             <div class="card-header">
               <h3><span>👥</span> إدارة حسابات الزبائن والديون</h3>
@@ -591,26 +603,6 @@
           </div>
 
           <div class="card">
-            <div class="card-header"><h3><span>📅</span> التقرير الدوري الأسبوعي</h3></div>
-            <div class="card-body">
-              <div class="grid3" style="margin-bottom:14px;">
-                <div><label class="form-label">من تاريخ</label><input type="date" class="form-control" id="weekFrom" onchange="renderWeeklyReport()"></div>
-                <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-control" id="weekTo" onchange="renderWeeklyReport()"></div>
-                <div style="align-self:end;"><button class="btn btn-secondary" style="width:100%;" onclick="setCurrentWeek()">الأسبوع الحالي</button></div>
-              </div>
-              <div class="stats-row" id="weeklyStatsRow"></div>
-              <div class="tbl-wrap">
-                <table>
-                  <thead>
-                    <tr><th>الزبون</th><th>عدد القوائم</th><th>الإجمالي</th><th>الواصل</th><th>الآجل</th></tr>
-                  </thead>
-                  <tbody id="weeklyCustomersBody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
             <div class="card-header"><h3><span>💹</span> تقرير أرباح المواد الصافية</h3></div>
             <div class="card-body">
               <div class="grid3" style="margin-bottom:14px;">
@@ -637,6 +629,35 @@
                 <div><label class="form-label">الجهة</label><select class="form-control" id="ledgerSelect" onchange="renderLedgerReport()"></select></div>
               </div>
               <div id="ledgerBox"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── SCREEN: WEEKLY REPORTS ─── -->
+      <section class="screen" id="screen-weekly">
+        <div class="page-body">
+          <div class="card">
+            <div class="card-body">
+              <div class="grid3" style="margin-bottom:14px;">
+                <div><label class="form-label" for="weekFrom">من تاريخ</label><input type="date" class="form-control" id="weekFrom" onchange="renderWeeklyReport()"></div>
+                <div><label class="form-label" for="weekTo">إلى تاريخ</label><input type="date" class="form-control" id="weekTo" onchange="renderWeeklyReport()"></div>
+                <div style="align-self:end;"><button class="btn btn-primary" style="width:100%;" onclick="setCurrentWeek()">الأسبوع الحالي</button></div>
+              </div>
+              <div class="stats-row" id="weeklyStatsRow"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3><span>👥</span> الزبائن خلال هذا الأسبوع</h3></div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead>
+                    <tr><th>الزبون</th><th>عدد القوائم</th><th>الإجمالي</th><th>الواصل (كاش)</th><th>الآجل</th><th>طباعة</th></tr>
+                  </thead>
+                  <tbody id="weeklyCustomersBody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -683,6 +704,27 @@
                 <label class="btn btn-danger" style="display:inline-flex;">
                   <span>📂</span> اختيار واستيراد ملف JSON
                   <input type="file" id="backupImportFile" accept=".json,application/json" style="display:none;" onchange="handleBackupImport(event)">
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- SQL export/import -->
+          <div class="grid2">
+            <div class="card">
+              <div class="card-header"><h3><span>🧾</span> تصدير SQL</h3></div>
+              <div class="card-body">
+                <p class="sub" style="margin-bottom:14px;">ملف .sql يحتوي كل بيانات النظام (الزبائن، المخزون، القوائم، الموردين، الصندوق، سجل العمليات...) بصيغة جداول SQL (CREATE TABLE / INSERT). يصلح كنسخة احتياطية أو لفتح البيانات بأي برنامج قواعد بيانات.</p>
+                <button class="btn btn-secondary" onclick="downloadSqlBackup()">⬇️ تنزيل نسخة SQL</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3><span>📥</span> استيراد من ملف SQL</h3></div>
+              <div class="card-body">
+                <p class="sub" style="color:var(--danger-text);font-weight:700;margin-bottom:14px;">⚠️ يقبل فقط نسخة SQL صدّرها هذا النظام، وتستبدل بيانات النظام الحالية بالكامل. تُنشأ نسخة أمان تلقائياً قبل الاستيراد.</p>
+                <label class="btn btn-danger" style="display:inline-flex;">
+                  <span>📂</span> اختيار ملف SQL
+                  <input type="file" id="sqlImportFile" accept=".sql,text/plain" style="display:none;" onchange="handleSqlImport(event)">
                 </label>
               </div>
             </div>

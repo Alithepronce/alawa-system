@@ -720,6 +720,23 @@ select.form-control, select {
   background: transparent;
 }
 
+/* ─── OFF-DEVICE BACKUP WARNING ─── */
+.backup-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  margin: 12px 24px 0;
+  padding: 10px 16px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-md);
+  color: var(--danger-text);
+  font-weight: 700;
+}
+.backup-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ═══ STAT CARDS (Dashboard & Metrics) ═══ */
 .stats-grid, .stats-row {
   display: grid;
