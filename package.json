@@ -1,6 +1,6 @@
 {
   "name": "alawa-management-system",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "نظام إدارة العلوة — نظام مالي ومحاسبي متكامل لسطح المكتب (Node.js + SQLite)",
   "author": "Alawa Management System",
   "main": "main.js",
