@@ -56,6 +56,9 @@ function deleteSupplier(ctx, id) {
   if (payCount > 0) {
     throw new HttpError(400, `لا يمكن حذف المورد "${s.name}" لوجود دفعات مالية مسجلة في سجله`);
   }
+  if (db.prepare('SELECT COUNT(*) as c FROM supplier_entries WHERE supplier_id=?').get(id).c > 0) {
+    throw new HttpError(400, `لا يمكن حذف المورد "${s.name}" لوجود قيود مسجلة في كشف حسابه`);
+  }
 
   try {
     db.prepare('UPDATE suppliers SET is_deleted=1, deleted_at=datetime(\'now\') WHERE id=?').run(id);
@@ -83,6 +86,29 @@ function supplierPayment(ctx, id) {
   logActivity(ctx, 'تسديد لمورد', `${s.name}: ${amount}`);
   return { data: { ok: true } };
 }
+// Manual balance entry with no cash movement. credit = we owe the supplier more (له);
+// debit = the supplier owes us / our debt to him shrinks (عليه).
+function supplierEntry(ctx, id) {
+  requirePermission(ctx, 'suppliers.finance');
+  const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
+  if (!s) throw new HttpError(404, 'المورد غير موجود');
+  const direction = str(ctx.body.direction);
+  if (!['credit', 'debit'].includes(direction)) throw new HttpError(400, 'حدد نوع القيد: له أو عليه');
+  const amount = num(ctx.body.amount);
+  if (amount <= 0) throw new HttpError(400, 'أدخل مبلغاً صحيحاً');
+  const note = str(ctx.body.note);
+  if (!note) throw new HttpError(400, 'اكتب سبب القيد لتوثيقه في كشف الحساب');
+  db.exec('BEGIN');
+  try {
+    db.prepare('INSERT INTO supplier_entries (supplier_id, direction, amount, note, date, created_by) VALUES (?,?,?,?,?,?)')
+      .run(id, direction, amount, note, nowISO(), ctx.session.id);
+    db.prepare('UPDATE suppliers SET balance = balance + ? WHERE id=?').run(direction === 'credit' ? amount : -amount, id);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  logActivity(ctx, direction === 'credit' ? 'إضافة دين للمورد (له)' : 'قيد على المورد (عليه)', `${s.name}: ${amount} — ${note}`);
+  return { data: { ok: true } };
+}
+
 function supplierLedger(ctx, id) {
   requirePermission(ctx, 'suppliers.ledger');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
@@ -107,8 +133,13 @@ function supplierLedger(ctx, id) {
     const label = r.method === 'credit' ? 'إرجاع مواد (خصم من الرصيد): ' : 'إرجاع مواد (نقدي): ';
     rows.push({ date: r.date, desc: `${label}${r.item_name} — ${r.amount}`, debit: r.method === 'credit' ? r.amount : 0, credit: 0, material: r.item_name, qty: `${r.qty} ${r.unit}` });
   }
+  const entries = db.prepare('SELECT * FROM supplier_entries WHERE supplier_id=? ORDER BY date').all(id);
+  for (const e of entries) {
+    const label = e.direction === 'credit' ? 'دين مضاف للمورد (له)' : 'قيد على المورد (عليه)';
+    rows.push({ date: e.date, desc: label + (e.note ? ' - ' + e.note : ''), debit: e.direction === 'debit' ? e.amount : 0, credit: e.direction === 'credit' ? e.amount : 0 });
+  }
   rows.sort((a, b) => new Date(a.date) - new Date(b.date));
   return { data: { rows, balance: s.balance, supplier: s } };
 }
 
-module.exports = { listSuppliers, createSupplier, updateSupplier, deleteSupplier, supplierPayment, supplierLedger };
+module.exports = { listSuppliers, createSupplier, updateSupplier, deleteSupplier, supplierPayment, supplierEntry, supplierLedger };

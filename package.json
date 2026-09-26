@@ -12,6 +12,7 @@
     "test:opening-debt": "node test_opening_debt.js",
     "test:debts": "node test_debts.js",
     "test:features": "node test_features.js",
+    "test:accounts": "node test_accounts.js",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
     "release": "electron-builder --win --x64 --publish never",

@@ -1,6 +1,6 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO, weightKg } = require('../helpers');
 
 function listItems(ctx) {
   const session = requirePermission(ctx, 'items.read');
@@ -86,6 +86,33 @@ function deleteItem(ctx, id) {
 }
 // Stock adjustment: reason required; any DECREASE is costed against profit as wastage,
 // instead of silently vanishing from inventory with no financial trace.
+// Receive more of an existing item outside a supplier purchase (e.g. stock found or brought in).
+// An optional cost per kg is blended into the weighted average cost like a purchase.
+function addStock(ctx, id) {
+  requirePermission(ctx, 'inventory.adjust');
+  const it = db.prepare('SELECT * FROM items WHERE id=? AND is_deleted=0').get(id);
+  if (!it) throw new HttpError(404, 'المادة غير موجودة');
+  const qty = num(ctx.body.qty);
+  if (qty <= 0) throw new HttpError(400, 'أدخل كمية صحيحة');
+  const unit = str(ctx.body.unit) || 'كغم';
+  const addKg = weightKg(qty, unit, it.bag_weight);
+  const hasCost = ctx.body.costPerKg !== undefined && ctx.body.costPerKg !== null && str(ctx.body.costPerKg) !== '';
+  const costPerKg = hasCost ? num(ctx.body.costPerKg, NaN) : it.avg_cost_per_kg || 0;
+  if (!Number.isFinite(costPerKg) || costPerKg < 0) throw new HttpError(400, 'تكلفة الكيلو غير صحيحة');
+  const note = str(ctx.body.note);
+  const newStock = it.stock_kg + addKg;
+  const newAvg = newStock > 0 ? (it.stock_kg * (it.avg_cost_per_kg || 0) + addKg * costPerKg) / newStock : costPerKg;
+  db.exec('BEGIN');
+  try {
+    db.prepare(`INSERT INTO adjustments (item_id, item_name, date, old_stock, new_stock, diff_kg, reason, note, cost_impact, created_by)
+      VALUES (?,?,?,?,?,?,?,?,0,?)`).run(id, it.name, nowISO(), it.stock_kg, newStock, addKg, 'إضافة مخزون', `${qty} ${unit}${note ? ' - ' + note : ''}`, ctx.session.id);
+    db.prepare('UPDATE items SET stock_kg=?, avg_cost_per_kg=? WHERE id=?').run(newStock, newAvg, id);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  logActivity(ctx, 'إضافة مخزون', `${it.name}: +${qty} ${unit} (${addKg} كغم)`);
+  return { data: { ok: true, stockKg: newStock } };
+}
+
 function adjustItem(ctx, id) {
   requirePermission(ctx, 'inventory.adjust');
   const it = db.prepare('SELECT * FROM items WHERE id=?').get(id);
@@ -107,4 +134,4 @@ function adjustItem(ctx, id) {
   return { data: { ok: true, costImpact } };
 }
 
-module.exports = { listItems, createItem, updateItem, deleteItem, adjustItem };
+module.exports = { listItems, createItem, updateItem, deleteItem, adjustItem, addStock };

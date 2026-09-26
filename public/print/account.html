@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>كشف حساب صيرفة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Roboto+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { margin: 10mm; size: A4 portrait; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif; font-size: 12.5px; color: #1A202C; background: #fff; padding: 15px; direction: rtl; }
+    .num { font-family: 'Roboto Mono', monospace; direction: ltr; unicode-bidi: embed; font-weight: 600; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2C3E50; padding-bottom: 12px; margin-bottom: 16px; }
+    .header h1 { font-family: 'Cairo', sans-serif; font-size: 20px; font-weight: 800; color: #2C3E50; }
+    .meta-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #2C3E50; color: #fff; padding: 8px; text-align: right; font-size: 12px; }
+    td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; }
+    tr.voided td { color: #94A3B8; text-decoration: line-through; }
+    tfoot td { font-weight: 800; border-top: 2px solid #2C3E50; background: #F8FAFC; }
+    .closing { font-family: 'Cairo', sans-serif; font-size: 16px; font-weight: 800; text-align: center; padding: 10px; border: 2px solid #2C3E50; border-radius: 8px; }
+    .signs { display: flex; justify-content: space-between; margin-top: 40px; }
+    .no-print { margin-top: 16px; text-align: center; }
+    .btn-print { padding: 8px 16px; background: #2C3E50; color: #fff; border: none; border-radius: 6px; font-family: 'Cairo', sans-serif; font-weight: 700; cursor: pointer; }
+    @media print { .no-print { display: none !important; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div id="root"><p style="text-align:center;padding:30px;">جاري تحميل الكشف...</p></div>
+  <div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ طباعة / حفظ PDF</button></div>
+<script>
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const bal = n => Math.abs(n) < 0.005 ? '<span class="num">0</span>' : `<span class="num">${fmt(Math.abs(n))}</span> ${n > 0 ? 'عليه' : 'له'}`;
+  const fmtDate = iso => new Date(iso).toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+  async function load() {
+    const p = new URLSearchParams(location.search);
+    const q = new URLSearchParams({ currency: p.get('currency') || 'IQD', from: p.get('from') || '', to: p.get('to') || '' });
+    try {
+      const [res, settings] = await Promise.all([
+        fetch(`/api/accounts/${encodeURIComponent(p.get('id'))}/statement?${q}`).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'تعذر تحميل الكشف'); return d; }),
+        fetch('/api/settings').then(r => r.json())
+      ]);
+      const cur = res.currency === 'USD' ? 'دولار' : 'دينار';
+      const period = res.from || res.to ? `من ${esc(res.from || 'البداية')} إلى ${esc(res.to || 'اليوم')}` : 'كل الفترات';
+      document.getElementById('root').innerHTML = `
+        <div class="header">
+          <div><h1>${esc(settings.storeName || 'نظام إدارة العلوة')}</h1><div>${esc(settings.storePhone || '')}</div></div>
+          <div style="text-align:left;"><strong>كشف حساب (${cur})</strong><div class="num">${new Date().toLocaleDateString('ar-EG')}</div></div>
+        </div>
+        <div class="meta-box">
+          <div>الاسم: <strong>${esc(res.account.name)}</strong>${res.account.phone ? ` — <span class="num">${esc(res.account.phone)}</span>` : ''}</div>
+          <div>الفترة: ${period}</div>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>مدين (عليه)</th><th>دائن (له)</th><th>الرصيد</th></tr></thead>
+          <tbody>
+            ${res.from ? `<tr><td></td><td>${esc(res.from)}</td><td><strong>رصيد سابق مدوّر</strong></td><td></td><td></td><td>${bal(res.opening)}</td></tr>` : ''}
+            ${res.rows.map(e => `<tr class="${e.voided ? 'voided' : ''}"><td class="num">${e.id}</td><td>${fmtDate(e.date)}</td><td>${esc(e.note)}${e.voided ? ' (ملغى)' : ''}</td><td class="num">${e.debit ? fmt(e.debit) : ''}</td><td class="num">${e.credit ? fmt(e.credit) : ''}</td><td>${bal(e.balance)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;">لا توجد قيود</td></tr>'}
+          </tbody>
+          <tfoot><tr><td colspan="3">المجموع</td><td class="num">${fmt(res.totalDebit)}</td><td class="num">${fmt(res.totalCredit)}</td><td>${bal(res.closing)}</td></tr></tfoot>
+        </table>
+        <div class="closing">الرصيد النهائي: ${Math.abs(res.closing) < 0.005 ? 'الحساب مصفّى' : `${fmt(Math.abs(res.closing))} ${cur} ${res.closing > 0 ? '(عليه لنا)' : '(له علينا)'}`}</div>
+        <div class="signs"><div>توقيع صاحب الحساب: ................</div><div>توقيع المحاسب: ................</div></div>`;
+    } catch (err) {
+      document.getElementById('root').innerHTML = `<p style="text-align:center;padding:30px;color:#B84335;">${esc(err.message)}</p>`;
+    }
+  }
+  load();
+</script>
+</body>
+</html>

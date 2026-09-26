@@ -4,7 +4,8 @@ const { HttpError, requireRole } = require('../helpers');
 const autoBackup = require('../auto_backup');
 
 const EXCLUDED_TABLES = new Set(['sessions', 'login_attempts']);
-const OPTIONAL_TABLES = new Set(['supplier_openings', 'invoice_requests']);
+// Tables added after the first backup format; older backups may not contain them.
+const OPTIONAL_TABLES = new Set(['supplier_openings', 'invoice_requests', 'supplier_entries', 'ledger_accounts', 'ledger_entries']);
 
 const SQL_FORMAT_TAG = '-- alawa-sql-backup-v1';
 const LAST_EXTERNAL_BACKUP_KEY = 'lastExternalBackupAt';
