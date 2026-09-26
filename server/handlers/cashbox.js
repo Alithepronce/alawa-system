@@ -1,16 +1,44 @@
 'use strict';
 const db = require('../db');
-const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
+const { HttpError, requirePermission, logActivity, num, str, nowISO, localDateStr } = require('../helpers');
+
+// Dates are stored as UTC ISO strings; filtering by SQLite's date() would use the UTC day, so a
+// movement made just after local midnight would land on the previous day. Filter by local day.
+function cashInRange(from, to) {
+  const inRange = iso => { const d = localDateStr(iso); return (!from || d >= from) && (!to || d <= to); };
+  return db.prepare('SELECT * FROM cashbox ORDER BY date DESC, id DESC').all().filter(c => inRange(c.date));
+}
 
 function listCashbox(ctx) {
   requirePermission(ctx, 'cashbox');
   const { from, to } = ctx.query;
-  let sql = 'SELECT * FROM cashbox WHERE 1=1';
-  const params = [];
-  if (from) { sql += ' AND date(date) >= date(?)'; params.push(from); }
-  if (to) { sql += ' AND date(date) <= date(?)'; params.push(to); }
-  sql += ' ORDER BY date DESC';
-  return { data: db.prepare(sql).all(...params) };
+  return { data: cashInRange(from, to) };
+}
+
+// Cash-drawer breakdown for a period. Credit sales come from invoices and are informational only:
+// they never touched the drawer, so they are excluded from the net.
+function cashboxSummary(ctx) {
+  requirePermission(ctx, 'cashbox');
+  const { from, to } = ctx.query;
+  const list = cashInRange(from, to);
+  const sum = (type, sources) => list.filter(c => c.type === type && (!sources || sources.includes(c.source))).reduce((s, c) => s + c.amount, 0);
+  const inRange = iso => { const d = localDateStr(iso); return (!from || d >= from) && (!to || d <= to); };
+  const creditSales = db.prepare('SELECT date, remaining FROM invoices WHERE voided=0').all()
+    .filter(i => inRange(i.date)).reduce((s, i) => s + i.remaining, 0);
+  const totalIn = sum('in'), totalOut = sum('out');
+  return {
+    data: {
+      directSales: sum('in', ['بيع']),
+      creditSales,
+      collections: sum('in', ['قبض من زبون', 'إيداع زبون']),
+      supplierReturns: sum('in', ['مرتجع مشتريات']),
+      otherIncome: sum('in', ['وارد آخر']),
+      purchases: sum('out', ['شراء', 'تسديد لمورد']),
+      customerReturns: sum('out', ['مرتجع نقدي', 'إلغاء فاتورة']),
+      expenses: sum('out', ['يدوي', 'مصروف يدوي']),
+      totalIn, totalOut, net: totalIn - totalOut
+    }
+  };
 }
 
 // Manual cash receipts must be explicitly classified. Customer receipts always require a
@@ -53,4 +81,4 @@ function createCashboxManual(ctx) {
   return { status: 201, data: { ok: true } };
 }
 
-module.exports = { listCashbox, createCashboxManual };
+module.exports = { listCashbox, cashboxSummary, createCashboxManual };

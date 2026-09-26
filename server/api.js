@@ -66,6 +66,7 @@ const routes = [
   ['POST', '/api/supplier-returns', (ctx) => returns.createSupplierReturn(ctx)],
 
   ['GET',  '/api/cashbox', (ctx) => cashbox.listCashbox(ctx)],
+  ['GET',  '/api/cashbox/summary', (ctx) => cashbox.cashboxSummary(ctx)],
   ['POST', '/api/cashbox', (ctx) => cashbox.createCashboxManual(ctx)],
 
   ['GET', '/api/reports/dashboard', (ctx) => reports.dashboardStats(ctx)],
@@ -79,6 +80,9 @@ const routes = [
 
   ['GET',  '/api/backup/export', (ctx) => backup.exportBackup(ctx)],
   ['POST', '/api/backup/import', (ctx) => backup.importBackup(ctx)],
+  ['GET',  '/api/backup/export-sql', (ctx) => backup.exportSql(ctx)],
+  ['POST', '/api/backup/import-sql', (ctx) => backup.importSql(ctx)],
+  ['GET',  '/api/backup/status', (ctx) => backup.backupStatus(ctx)],
   ['GET',  '/api/backup/list', (ctx) => backup.listAutoBackups(ctx)],
   ['POST', '/api/backup/create', (ctx) => backup.triggerAutoBackup(ctx)],
 
