@@ -58,6 +58,37 @@ function runMigrations() {
       date TEXT NOT NULL,
       created_by INTEGER REFERENCES users(id)
     );
+    CREATE TABLE IF NOT EXISTS supplier_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+      direction TEXT NOT NULL CHECK(direction IN ('credit','debit')),
+      amount REAL NOT NULL,
+      note TEXT,
+      date TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS ledger_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      note TEXT,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL REFERENCES ledger_accounts(id),
+      date TEXT NOT NULL,
+      currency TEXT NOT NULL CHECK(currency IN ('IQD','USD')),
+      direction TEXT NOT NULL CHECK(direction IN ('debit','credit')),
+      amount REAL NOT NULL,
+      note TEXT,
+      with_cash INTEGER NOT NULL DEFAULT 0,
+      voided INTEGER NOT NULL DEFAULT 0,
+      voided_at TEXT,
+      created_by INTEGER REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ledger_entries_account ON ledger_entries(account_id);
     CREATE TABLE IF NOT EXISTS invoice_requests (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       request_id TEXT NOT NULL,

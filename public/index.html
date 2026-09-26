@@ -82,6 +82,9 @@
         <button class="navbtn accountant-owner-only" data-scr="debtors" aria-label="المدانين والتجار" onclick="showScreen('debtors')">
           <span class="nav-icon">📒</span><span class="nav-label">المدانين والتجار</span>
         </button>
+        <button class="navbtn accountant-owner-only" data-scr="accounts" aria-label="دفتر الحسابات (صيرفة)" onclick="showScreen('accounts')">
+          <span class="nav-icon">💱</span><span class="nav-label">دفتر الحسابات (صيرفة)</span>
+        </button>
         <button class="navbtn accountant-owner-only" data-scr="debtreports" aria-label="كشوفات الديون والمبيعات" onclick="showScreen('debtreports')">
           <span class="nav-icon">🧾</span><span class="nav-label">كشوفات الديون والمبيعات</span>
         </button>
@@ -540,9 +543,36 @@
         </div>
       </section>
 
+      <!-- ─── SCREEN: PERSONAL ACCOUNTS (صيرفة) ─── -->
+      <section class="screen" id="screen-accounts">
+        <div class="page-body">
+          <div class="stats-row" id="acctStatsRow"></div>
+          <div class="card">
+            <div class="card-header">
+              <h3><span>💱</span> حسابات الأشخاص — مدين ودائن</h3>
+              <button class="btn btn-primary" onclick="openAccountModal()">+ حساب جديد</button>
+            </div>
+            <div class="card-body">
+              <p class="sub" style="margin-bottom:12px;"><strong>مدين (عليه)</strong>: مبلغ صار بذمته لنا، مثل مبلغ سلّمناه له. <strong>دائن (له)</strong>: مبلغ صار بذمتنا له، مثل مبلغ استلمناه منه. الدينار والدولار رصيدان منفصلان.</p>
+              <div class="search-wrap">
+                <input class="form-control" id="acctSearch" placeholder="ابحث باسم صاحب الحساب أو هاتفه..." oninput="renderAccountsTable()">
+                <span class="search-icon">🔍</span>
+              </div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>الاسم</th><th>الهاتف</th><th>رصيد الدينار</th><th>رصيد الدولار</th><th>ملاحظة</th><th>الإجراءات</th></tr></thead>
+                  <tbody id="accountsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ─── SCREEN: SUPPLIERS ─── -->
       <section class="screen" id="screen-suppliers">
         <div class="page-body">
+          <div class="stats-row accountant-owner-only" id="suppStatsRow"></div>
           <div class="card">
             <div class="card-header">
               <h3><span>🚚</span> الموردون وفواتير الشراء</h3>
@@ -556,7 +586,7 @@
               <div class="tbl-wrap">
                 <table id="suppliersTable">
                   <thead>
-                    <tr><th>اسم المورد</th><th>الهاتف</th><th>رصيد المورد المستحق</th><th>الإجراءات</th></tr>
+                    <tr><th>اسم المورد</th><th>الهاتف</th><th>دائن (له علينا)</th><th>مدين (عليه لنا)</th><th>الإجراءات</th></tr>
                   </thead>
                   <tbody id="suppliersTableBody"></tbody>
                 </table>
@@ -808,6 +838,31 @@
                 <div class="form-group"><label class="form-label">حد التنبيه الافتراضي للمخزون المنخفض (كغم)</label><input type="number" class="form-control is-num" id="setLowStock"></div>
               </div>
               <button class="btn btn-primary" onclick="saveSettings()">💾 حفظ التغييرات</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-header"><h3><span>🖨️</span> ورق طباعة الفاتورة ومعايرتها</h3></div>
+            <div class="card-body">
+              <p class="sub" style="margin-bottom:12px;">اختر حجم الورق الذي تستخدمه طابعتك، ثم اطبع صفحة تجريبية. إذا طلعت الطباعة مزاحة أو مقصوصة، عدّل الهوامش أو الإزاحة وأعد التجربة.</p>
+              <div class="grid3">
+                <div class="form-group"><label class="form-label" for="setPrintPaper">حجم الورق</label>
+                  <select class="form-control" id="setPrintPaper">
+                    <option value="80mm">حراري 80 ملم</option>
+                    <option value="58mm">حراري 58 ملم</option>
+                    <option value="A5">A5</option>
+                    <option value="A4">A4</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label" for="setPrintMargin">الهامش (ملم)</label><input type="number" min="0" max="30" class="form-control is-num" id="setPrintMargin"></div>
+                <div class="form-group"><label class="form-label" for="setPrintFont">حجم الخط (%)</label><input type="number" min="60" max="200" step="5" class="form-control is-num" id="setPrintFont"></div>
+                <div class="form-group"><label class="form-label" for="setPrintOffsetX">إزاحة أفقية (ملم، موجب = يمين)</label><input type="number" min="-20" max="20" step="0.5" class="form-control is-num" id="setPrintOffsetX"></div>
+                <div class="form-group"><label class="form-label" for="setPrintOffsetY">إزاحة عمودية (ملم، موجب = أسفل)</label><input type="number" min="-20" max="20" step="0.5" class="form-control is-num" id="setPrintOffsetY"></div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="printCalibrationSample()">🧪 طباعة صفحة تجريبية</button>
+                <button class="btn btn-primary" onclick="savePrintSettings()">💾 حفظ إعدادات الطباعة</button>
+              </div>
             </div>
           </div>
 

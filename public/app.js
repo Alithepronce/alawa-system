@@ -251,7 +251,7 @@ function applyRolePermissions() {
   document.querySelectorAll('.accountant-owner-only').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('.navbtn[data-scr="suppliers"]').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-inventory table thead th:nth-child(7), #screen-inventory table thead th:nth-child(8), #screen-inventory table thead th:nth-child(9)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
-  document.querySelectorAll('#screen-suppliers table thead th:nth-child(3)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
+  document.querySelectorAll('#screen-suppliers table thead th:nth-child(3), #screen-suppliers table thead th:nth-child(4)').forEach(el => { el.style.display = isWarehouse ? 'none' : ''; });
   document.querySelectorAll('#screen-suppliers .card-header button').forEach(el => { el.style.display = ''; });
 }
 
@@ -300,6 +300,7 @@ const SCREEN_TITLES = {
   dashboard: { title: 'لوحة المعلومات', sub: 'نظرة عامة على نشاط اليوم والمؤشرات المالية للمكتب' },
   pos: { title: 'نقطة البيع (POS)', sub: 'تسجيل قائمة بيع جديدة مع دعم الباركود والطباعة' },
   debtreports: { title: 'كشوفات الديون والمبيعات', sub: 'كشوف يومية وأسبوعية وشهرية وسنوية بتفاصيل كاملة مع الطباعة وحفظ PDF' },
+  accounts: { title: 'دفتر الحسابات (صيرفة)', sub: 'حسابات الأشخاص مدين ودائن بالدينار والدولار، مع كشف حساب تفصيلي بالرصيد المتراكم' },
   debtors: { title: 'المدانين والتجار', sub: 'كل من عليه دين لنا، وكل تاجر أو مورد له مبلغ بذمتنا' },
   customers: { title: 'إدارة الزبائن', sub: 'دليل الزبائن، متابعة الديون، وتحديد سقوف الائتمان' },
   inventory: { title: 'المخزون والمواد', sub: 'إدارة أصناف الطحين والأعلاف، الأوزان، والأسعار' },
@@ -335,6 +336,7 @@ function showScreen(name) {
   if (name === 'pos') renderPOS();
   if (name === 'customers') renderCustomersScreen();
   if (name === 'debtors') renderDebtorsScreen();
+  if (name === 'accounts') renderAccountsScreen();
   if (name === 'debtreports') renderDebtReportsScreen();
   if (name === 'inventory') renderInventoryScreen();
   if (name === 'suppliers') renderSuppliersScreen();
@@ -1419,12 +1421,71 @@ function renderInventoryTable() {
         ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">${fmtNum(i.price_wholesale)}</td><td class="num">${fmtNum(i.price_office)}</td><td class="num">${fmtNum(i.price_normal)}</td>`}
         <td class="num">${esc(i.barcode) || '<span style="color:var(--text-muted);">-</span>'}</td>
         <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-success" onclick="openAddStockModal(${i.id})">+ إضافة مخزون</button>
           <button class="btn btn-sm btn-secondary" onclick="openAdjustModal(${i.id})">تسوية مخزون</button>
           ${currentUser?.role === 'أمين مخزن' ? '' : `<button class="btn btn-sm btn-secondary" onclick="openItemModal(${i.id})">تعديل</button><button class="btn btn-sm btn-danger" onclick="deleteItem(${i.id})">حذف</button>`}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function openAddStockModal(id) {
+  const it = state.items.find(x => x.id === id);
+  if (!it) return;
+  const showCost = currentUser?.role !== 'أمين مخزن';
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>إضافة مخزون إلى: ${esc(it.name)}</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="sub" style="margin-bottom:12px;">المخزون الحالي: <strong class="num">${fmtNum(it.stock_kg)}</strong> كغم (${fmtNum(it.stock_kg / 1000)} طن). للبضاعة المشتراة من مورد استخدم «فاتورة شراء» حتى يُسجَّل على حسابه.</p>
+          <div class="grid2">
+            <div class="form-group"><label class="form-label" for="asQty">الكمية المضافة *</label><input type="number" min="0" class="form-control is-num" id="asQty" placeholder="0" oninput="asPreview(${id})"></div>
+            <div class="form-group"><label class="form-label" for="asUnit">الوحدة</label>
+              <select class="form-control" id="asUnit" onchange="asPreview(${id})">
+                <option value="كيس">كيس (${fmtNum(it.bag_weight)} كغم)</option><option value="كغم">كغم</option><option value="طن">طن</option>
+              </select>
+            </div>
+          </div>
+          ${showCost ? `<div class="form-group"><label class="form-label" for="asCost">تكلفة الكيلو (اختياري — يُترك فارغاً لاعتماد متوسط التكلفة الحالي ${fmtNum(it.avg_cost_per_kg)})</label><input type="number" min="0" class="form-control is-num" id="asCost"></div>` : ''}
+          <div class="form-group"><label class="form-label" for="asNote">ملاحظة</label><input class="form-control" id="asNote" placeholder="مصدر البضاعة أو سبب الإضافة"></div>
+          <div class="sub" id="asPreviewBox"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+          <button class="btn btn-success" onclick="saveAddStock(${id})">إضافة للمخزون</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function asPreview(id) {
+  const it = state.items.find(x => x.id === id);
+  const qty = parseFloat(document.getElementById('asQty').value) || 0;
+  const unit = document.getElementById('asUnit').value;
+  const kg = unit === 'طن' ? qty * 1000 : unit === 'كيس' ? qty * (Number(it.bag_weight) || 1) : qty;
+  document.getElementById('asPreviewBox').textContent = qty > 0 ? `سيصبح المخزون ${fmtNum(it.stock_kg + kg)} كغم (+${fmtNum(kg)} كغم)` : '';
+}
+
+async function saveAddStock(id) {
+  try {
+    await api('POST', `/items/${id}/add-stock`, {
+      qty: document.getElementById('asQty').value,
+      unit: document.getElementById('asUnit').value,
+      costPerKg: document.getElementById('asCost') ? document.getElementById('asCost').value : '',
+      note: document.getElementById('asNote').value.trim()
+    });
+    closeModal();
+    toast('تمت إضافة الكمية إلى المخزون', 'ok');
+    await loadAllData();
+    renderInventoryScreen();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 function openItemModal(id) {
@@ -1557,24 +1618,76 @@ async function saveAdjust(id) {
 ========================================================= */
 function renderSuppliersScreen() {
   const body = document.getElementById('suppliersTableBody');
+  const isWarehouse = currentUser?.role === 'أمين مخزن';
+  // A positive supplier balance is money we owe him (دائن)؛ a negative one is money he owes us (مدين).
+  const owedTo = state.suppliers.reduce((s, x) => s + Math.max(x.balance || 0, 0), 0);
+  const owedBy = state.suppliers.reduce((s, x) => s + Math.max(-(x.balance || 0), 0), 0);
+  const stats = document.getElementById('suppStatsRow');
+  if (stats) stats.innerHTML = isWarehouse ? '' : `
+    <div class="stat-card info"><div class="stat-label">عدد الموردين</div><div class="stat-value">${state.suppliers.length}</div></div>
+    <div class="stat-card danger"><div class="stat-label">دائن — مستحق للموردين علينا</div><div class="stat-value" style="color:var(--danger-text);">${fmtNum(owedTo)}</div></div>
+    <div class="stat-card"><div class="stat-label">مدين — مستحق لنا على الموردين</div><div class="stat-value" style="color:var(--success-text);">${fmtNum(owedBy)}</div></div>`;
   if (state.suppliers.length === 0) {
-    body.innerHTML = '<tr><td colspan="4"><div class="empty-state">لا يوجد موردون مسجلون</div></td></tr>';
+    body.innerHTML = `<tr><td colspan="${isWarehouse ? 3 : 5}"><div class="empty-state">لا يوجد موردون مسجلون</div></td></tr>`;
     return;
   }
   body.innerHTML = state.suppliers.map(s => `
     <tr>
       <td><strong>${esc(s.name)}</strong></td>
       <td class="num">${esc(s.phone) || '-'}</td>
-      ${currentUser?.role === 'أمين مخزن' ? '' : `<td class="num">
-        <span class="badge ${s.balance > 0 ? 'badge-danger' : 'badge-sage'}">
-          ${fmtNum(s.balance)}
-        </span>
-      </td>`}
+      ${isWarehouse ? '' : `
+        <td class="num">${s.balance > 0.005 ? `<span class="badge badge-danger">${fmtNum(s.balance)}</span>` : '-'}</td>
+        <td class="num">${s.balance < -0.005 ? `<span class="badge badge-sage">${fmtNum(-s.balance)}</span>` : '-'}</td>`}
       <td style="white-space:nowrap;">
-        ${currentUser?.role === 'أمين مخزن' ? `<button class="btn btn-sm btn-secondary" onclick="openSupplierReturnModal(${s.id})">مرتجع مخزن</button>` : `<button class="btn btn-sm btn-secondary" onclick="openLedgerFor('supplier', ${s.id})">كشف حساب</button><button class="btn btn-sm btn-success" onclick="openSupplierPaymentModal(${s.id})">تسديد دفعة</button><button class="btn btn-sm btn-secondary" onclick="openSupplierModal(${s.id})">تعديل</button><button class="btn btn-sm btn-danger" onclick="deleteSupplier(${s.id})">حذف</button>`}
+        ${isWarehouse ? `<button class="btn btn-sm btn-secondary" onclick="openSupplierReturnModal(${s.id})">مرتجع مخزن</button>` : `<button class="btn btn-sm btn-primary" onclick="openPurchaseModal(${s.id})">شراء</button><button class="btn btn-sm btn-secondary" onclick="openSupplierEntryModal(${s.id})">إضافة دين / قيد</button><button class="btn btn-sm btn-secondary" onclick="openLedgerFor('supplier', ${s.id})">كشف حساب</button><button class="btn btn-sm btn-success" onclick="openSupplierPaymentModal(${s.id})">تسديد دفعة</button><button class="btn btn-sm btn-secondary" onclick="openSupplierModal(${s.id})">تعديل</button><button class="btn btn-sm btn-danger" onclick="deleteSupplier(${s.id})">حذف</button>`}
       </td>
     </tr>
   `).join('');
+}
+
+function openSupplierEntryModal(id) {
+  const s = state.suppliers.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>إضافة دين / قيد على حساب المورد: ${esc(s.name)}</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="sub" style="margin-bottom:12px;">الرصيد الحالي: <strong class="num">${fmtNum(Math.abs(s.balance))}</strong> ${s.balance > 0.005 ? '(له علينا)' : s.balance < -0.005 ? '(عليه لنا)' : ''}. القيد لا يحرك الصندوق؛ للدفع النقدي استخدم «تسديد دفعة».</p>
+          <div class="form-group"><label class="form-label" for="seDirection">نوع القيد</label>
+            <select class="form-control" id="seDirection">
+              <option value="credit">دائن — دين للمورد علينا (له)</option>
+              <option value="debit">مدين — دين على المورد لنا (عليه)</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label" for="seAmount">المبلغ *</label><input type="number" min="0" class="form-control is-num" id="seAmount" placeholder="0"></div>
+          <div class="form-group"><label class="form-label" for="seNote">السبب / البيان *</label><input class="form-control" id="seNote" placeholder="مثال: دين قديم، فرق حساب، بضاعة تالفة على حسابه"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveSupplierEntry(${id})">تسجيل القيد</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveSupplierEntry(id) {
+  try {
+    await api('POST', `/suppliers/${id}/entry`, {
+      direction: document.getElementById('seDirection').value,
+      amount: document.getElementById('seAmount').value,
+      note: document.getElementById('seNote').value.trim()
+    });
+    closeModal();
+    toast('تم تسجيل القيد في حساب المورد', 'ok');
+    await loadAllData();
+    renderSuppliersScreen();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 function openSupplierModal(id) {
@@ -1672,7 +1785,7 @@ async function saveSupplierPayment(id) {
 
 /* PURCHASES MODAL */
 let purchaseLines = [];
-function openPurchaseModal() {
+function openPurchaseModal(supplierId) {
   purchaseLines = [];
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay">
@@ -1685,7 +1798,7 @@ function openPurchaseModal() {
           <div class="form-group">
             <label class="form-label">المورد *</label>
             <select class="form-control" id="pSupplier">
-              ${state.suppliers.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+              ${state.suppliers.map(s => `<option value="${s.id}" ${s.id === supplierId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
             </select>
           </div>
           <div class="grid2">
@@ -1813,6 +1926,8 @@ async function renderCashboxTable() {
     card('', 'المقبوض من تسديد الديون والإيداعات', sm.collections),
     card('', 'مرتجعات نقدية من الموردين', sm.supplierReturns),
     sm.otherIncome ? card('', 'وارد آخر', sm.otherIncome) : '',
+    sm.ledgerIn ? card('', 'مقبوضات دفتر الحسابات (صيرفة)', sm.ledgerIn) : '',
+    sm.ledgerOut ? card('danger', 'مدفوعات دفتر الحسابات (صيرفة)', sm.ledgerOut) : '',
     card('danger', 'المشتريات (شراء + تسديد لمورد)', sm.purchases),
     card('danger', 'مرتجعات نقدية للزبائن', sm.customerReturns),
     card('danger', 'نفقات تشغيلية داخلية', sm.expenses),
@@ -2537,6 +2652,38 @@ function renderSettingsScreen() {
   if (usdInput) usdInput.value = state.settings.usdRate || '1530';
   document.getElementById('setDefCredit').value = state.settings.defCredit || '';
   document.getElementById('setLowStock').value = state.settings.lowStock || '';
+  document.getElementById('setPrintPaper').value = state.settings.printPaper || '80mm';
+  document.getElementById('setPrintMargin').value = state.settings.printMarginMm ?? '3';
+  document.getElementById('setPrintFont').value = state.settings.printFontScale ?? '100';
+  document.getElementById('setPrintOffsetX').value = state.settings.printOffsetXmm ?? '0';
+  document.getElementById('setPrintOffsetY').value = state.settings.printOffsetYmm ?? '0';
+}
+
+function printSettingsForm() {
+  return {
+    printPaper: document.getElementById('setPrintPaper').value,
+    printMarginMm: document.getElementById('setPrintMargin').value || '0',
+    printFontScale: document.getElementById('setPrintFont').value || '100',
+    printOffsetXmm: document.getElementById('setPrintOffsetX').value || '0',
+    printOffsetYmm: document.getElementById('setPrintOffsetY').value || '0'
+  };
+}
+
+async function savePrintSettings() {
+  try {
+    await api('PUT', '/settings', printSettingsForm());
+    toast('تم حفظ إعدادات الطباعة', 'ok');
+    await loadAllData();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+// The sample uses the values currently in the form, so they can be tried before saving.
+function printCalibrationSample() {
+  const params = new URLSearchParams({ sample: '1', ...printSettingsForm() });
+  const win = window.open(`/print/invoice.html?${params}`, 'InvoicePrint', 'width=900,height=950,scrollbars=yes');
+  if (win) win.focus();
 }
 
 async function saveSettings() {
@@ -2603,6 +2750,282 @@ function convertIqdToUsd(val) {
   const num = parseFloat(val) || 0;
   const usdEl = document.getElementById('calcUsdInput');
   if (usdEl) usdEl.value = (num / rate).toFixed(2);
+}
+
+/* =========================================================
+   PERSONAL ACCOUNTS BOOK (صيرفة)
+   balance > 0 → مدين (عليه لنا)، balance < 0 → دائن (له علينا)
+========================================================= */
+let accountsList = [];
+const CUR_LABEL = { IQD: 'د.ع', USD: '$' };
+
+function acctBalanceHtml(n, cur) {
+  if (Math.abs(n) < 0.005) return '<span class="badge badge-slate">0</span>';
+  return n > 0
+    ? `<span class="badge badge-danger" title="مدين">عليه ${fmtNum(n)} ${CUR_LABEL[cur]}</span>`
+    : `<span class="badge badge-sage" title="دائن">له ${fmtNum(-n)} ${CUR_LABEL[cur]}</span>`;
+}
+
+async function renderAccountsScreen() {
+  try {
+    accountsList = await api('GET', '/accounts');
+  } catch (e) {
+    toast(e.message, 'err');
+    return;
+  }
+  const sum = (cur, sign) => accountsList.reduce((s, a) => s + Math.max(sign * a.balances[cur], 0), 0);
+  document.getElementById('acctStatsRow').innerHTML = `
+    <div class="stat-card info"><div class="stat-label">عدد الحسابات</div><div class="stat-value">${accountsList.length}</div></div>
+    <div class="stat-card danger"><div class="stat-label">مدين — لنا عليهم (دينار)</div><div class="stat-value">${fmtNum(sum('IQD', 1))}</div></div>
+    <div class="stat-card"><div class="stat-label">دائن — لهم علينا (دينار)</div><div class="stat-value">${fmtNum(sum('IQD', -1))}</div></div>
+    <div class="stat-card danger"><div class="stat-label">مدين — لنا عليهم (دولار)</div><div class="stat-value">${fmtNum(sum('USD', 1))} $</div></div>
+    <div class="stat-card"><div class="stat-label">دائن — لهم علينا (دولار)</div><div class="stat-value">${fmtNum(sum('USD', -1))} $</div></div>
+  `;
+  renderAccountsTable();
+}
+
+function renderAccountsTable() {
+  const q = document.getElementById('acctSearch').value.trim();
+  const list = accountsList.filter(a => !q || a.name.includes(q) || (a.phone || '').includes(q));
+  const body = document.getElementById('accountsTableBody');
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="6"><div class="empty-state">${accountsList.length ? 'لا توجد حسابات مطابقة للبحث' : 'لا توجد حسابات بعد — اضغط «+ حساب جديد»'}</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(a => `
+    <tr>
+      <td><strong>${esc(a.name)}</strong></td>
+      <td class="num">${esc(a.phone) || '-'}</td>
+      <td class="num">${acctBalanceHtml(a.balances.IQD, 'IQD')}</td>
+      <td class="num">${acctBalanceHtml(a.balances.USD, 'USD')}</td>
+      <td>${esc(a.note) || '-'}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm btn-primary" onclick="openAccountEntryModal(${a.id})">+ قيد</button>
+        <button class="btn btn-sm btn-secondary" onclick="openAccountStatement(${a.id})">كشف حساب</button>
+        <button class="btn btn-sm btn-secondary" onclick="openAccountModal(${a.id})">تعديل</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteAccount(${a.id})">حذف</button>
+      </td>
+    </tr>`).join('');
+}
+
+function openAccountModal(id) {
+  const a = id ? accountsList.find(x => x.id === id) : null;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>${a ? 'تعديل الحساب' : 'فتح حساب جديد'}</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group"><label class="form-label" for="acName">اسم صاحب الحساب *</label><input class="form-control" id="acName" value="${a ? esc(a.name) : ''}"></div>
+          <div class="form-group"><label class="form-label" for="acPhone">الهاتف</label><input class="form-control is-num" id="acPhone" value="${a ? esc(a.phone) : ''}"></div>
+          <div class="form-group"><label class="form-label" for="acNote">ملاحظة</label><input class="form-control" id="acNote" value="${a ? esc(a.note) : ''}"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveAccount(${a ? a.id : 'null'})">حفظ</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveAccount(id) {
+  const body = { name: document.getElementById('acName').value.trim(), phone: document.getElementById('acPhone').value.trim(), note: document.getElementById('acNote').value.trim() };
+  try {
+    if (id) await api('PUT', `/accounts/${id}`, body);
+    else await api('POST', '/accounts', body);
+    closeModal();
+    toast('تم حفظ الحساب', 'ok');
+    renderAccountsScreen();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function deleteAccount(id) {
+  const a = accountsList.find(x => x.id === id);
+  if (!a) return;
+  if (!await confirmDialog('حذف الحساب', `حذف حساب "${a.name}"؟ لا يمكن حذف حساب رصيده غير مصفّى.`, 'نعم، حذف')) return;
+  try {
+    await api('DELETE', `/accounts/${id}`);
+    toast('تم حذف الحساب', 'ok');
+    renderAccountsScreen();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+function openAccountEntryModal(id) {
+  const a = accountsList.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>قيد جديد على حساب: ${esc(a.name)}</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid2" style="margin-bottom:12px;">
+            <div class="stat-card" style="background:var(--bg-raised);"><div class="stat-label">رصيد الدينار</div><div>${acctBalanceHtml(a.balances.IQD, 'IQD')}</div></div>
+            <div class="stat-card" style="background:var(--bg-raised);"><div class="stat-label">رصيد الدولار</div><div>${acctBalanceHtml(a.balances.USD, 'USD')}</div></div>
+          </div>
+          <div class="form-group"><label class="form-label" for="aeDirection">نوع القيد</label>
+            <select class="form-control" id="aeDirection" onchange="aeUpdateHint()">
+              <option value="debit">مدين — عليه لنا (سلّمناه مبلغاً / صار بذمته)</option>
+              <option value="credit">دائن — له علينا (استلمنا منه مبلغاً / صار بذمتنا)</option>
+            </select>
+          </div>
+          <div class="grid2">
+            <div class="form-group"><label class="form-label" for="aeAmount">المبلغ *</label><input type="number" min="0" class="form-control is-num" id="aeAmount" placeholder="0"></div>
+            <div class="form-group"><label class="form-label" for="aeCurrency">العملة</label>
+              <select class="form-control" id="aeCurrency" onchange="aeUpdateHint()"><option value="IQD">دينار عراقي</option><option value="USD">دولار أمريكي</option></select>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label" for="aeNote">البيان *</label><input class="form-control" id="aeNote" placeholder="مثال: سلفة، تسديد، أمانة، حوالة"></div>
+          <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="aeWithCash" checked onchange="aeUpdateHint()"> <span id="aeCashLabel"></span>
+          </label>
+          <p class="sub" id="aeHint"></p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveAccountEntry(${id})">تسجيل القيد</button>
+        </div>
+      </div>
+    </div>`;
+  aeUpdateHint();
+}
+
+function aeUpdateHint() {
+  const dir = document.getElementById('aeDirection').value;
+  const cur = document.getElementById('aeCurrency').value;
+  const cash = document.getElementById('aeWithCash');
+  cash.disabled = cur !== 'IQD';
+  if (cur !== 'IQD') cash.checked = false;
+  document.getElementById('aeCashLabel').textContent = dir === 'debit' ? 'المبلغ خرج نقداً من الصندوق' : 'المبلغ دخل نقداً إلى الصندوق';
+  document.getElementById('aeHint').textContent = cur !== 'IQD'
+    ? 'قيود الدولار لا تحرّك صندوق الدينار.'
+    : cash.checked ? 'سيُسجَّل المبلغ في صندوق النقدية أيضاً.' : 'قيد على الحساب فقط بدون حركة صندوق.';
+}
+
+async function saveAccountEntry(id) {
+  try {
+    await api('POST', `/accounts/${id}/entries`, {
+      direction: document.getElementById('aeDirection').value,
+      currency: document.getElementById('aeCurrency').value,
+      amount: document.getElementById('aeAmount').value,
+      note: document.getElementById('aeNote').value.trim(),
+      withCash: document.getElementById('aeWithCash').checked
+    });
+    closeModal();
+    toast('تم تسجيل القيد', 'ok');
+    await renderAccountsScreen();
+    if (acctStatementState && acctStatementState.id === id) openAccountStatement(id);
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+let acctStatementState = null;
+function openAccountStatement(id) {
+  const a = accountsList.find(x => x.id === id);
+  if (!a) return;
+  const prev = acctStatementState && acctStatementState.id === id ? acctStatementState : { currency: 'IQD', from: '', to: '' };
+  acctStatementState = { ...prev, id };
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box" style="width:900px;max-width:96vw;">
+        <div class="modal-header">
+          <h3>كشف حساب: ${esc(a.name)}</h3>
+          <button class="modal-close" onclick="closeModal();acctStatementState=null;">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid3" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px;">
+            <div><label class="form-label" for="asCur">العملة</label><select class="form-control" id="asCur" onchange="loadAccountStatement()"><option value="IQD">دينار</option><option value="USD">دولار</option></select></div>
+            <div><label class="form-label" for="asFrom">من تاريخ</label><input type="date" class="form-control" id="asFrom" onchange="loadAccountStatement()"></div>
+            <div><label class="form-label" for="asTo">إلى تاريخ</label><input type="date" class="form-control" id="asTo" onchange="loadAccountStatement()"></div>
+          </div>
+          <div id="asBody"><div class="empty-state">جارٍ التحميل...</div></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="openAccountEntryModal(${id})">+ قيد جديد</button>
+          <button class="btn btn-secondary" onclick="printAccountStatement()">🖨️ طباعة الكشف</button>
+          <button class="btn btn-secondary" onclick="closeModal();acctStatementState=null;">إغلاق</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('asCur').value = acctStatementState.currency;
+  document.getElementById('asFrom').value = acctStatementState.from;
+  document.getElementById('asTo').value = acctStatementState.to;
+  loadAccountStatement();
+}
+
+// Number and word are kept in separate spans so the RTL word is not reordered inside an LTR number.
+function acctRunningLabel(n, cur = '') {
+  if (Math.abs(n) < 0.005) return '<span class="num">0</span>';
+  return `<span class="num">${fmtNum(Math.abs(n))}</span>${cur ? ' ' + cur : ''} ${n > 0 ? 'عليه' : 'له'}`;
+}
+
+async function loadAccountStatement() {
+  const st = acctStatementState;
+  st.currency = document.getElementById('asCur').value;
+  st.from = document.getElementById('asFrom').value;
+  st.to = document.getElementById('asTo').value;
+  const q = new URLSearchParams({ currency: st.currency, from: st.from, to: st.to });
+  const box = document.getElementById('asBody');
+  try {
+    const r = await api('GET', `/accounts/${st.id}/statement?${q}`);
+    const isOwner = currentUser?.role === 'المالك';
+    const cur = CUR_LABEL[r.currency];
+    box.innerHTML = `
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>مدين (عليه)</th><th>دائن (له)</th><th>الرصيد</th>${isOwner ? '<th></th>' : ''}</tr></thead>
+          <tbody>
+            ${r.from ? `<tr><td></td><td>${esc(r.from)}</td><td><strong>رصيد سابق مدوّر</strong></td><td></td><td></td><td><strong>${acctRunningLabel(r.opening)}</strong></td>${isOwner ? '<td></td>' : ''}</tr>` : ''}
+            ${r.rows.length ? r.rows.map(e => `
+              <tr style="${e.voided ? 'opacity:.55;text-decoration:line-through;' : ''}">
+                <td class="num">${e.id}</td>
+                <td>${fmtDate(e.date)}</td>
+                <td>${esc(e.note)}${e.withCash ? ' <span class="badge badge-slate">صندوق</span>' : ''}${e.voided ? ' <span class="badge badge-danger">ملغى</span>' : ''}</td>
+                <td class="num">${e.debit ? fmtNum(e.debit) : ''}</td>
+                <td class="num">${e.credit ? fmtNum(e.credit) : ''}</td>
+                <td><strong>${acctRunningLabel(e.balance)}</strong></td>
+                ${isOwner ? `<td>${e.voided ? '' : `<button class="btn btn-sm btn-danger" onclick="voidAccountEntry(${e.id})">إلغاء</button>`}</td>` : ''}
+              </tr>`).join('') : `<tr><td colspan="${isOwner ? 7 : 6}"><div class="empty-state">لا توجد قيود ${r.currency === 'USD' ? 'بالدولار' : 'بالدينار'} في هذه الفترة</div></td></tr>`}
+          </tbody>
+          <tfoot>
+            <tr><td colspan="3"><strong>المجموع</strong></td><td class="num"><strong>${fmtNum(r.totalDebit)}</strong></td><td class="num"><strong>${fmtNum(r.totalCredit)}</strong></td><td><strong>${acctRunningLabel(r.closing, cur)}</strong></td>${isOwner ? '<td></td>' : ''}</tr>
+          </tfoot>
+        </table>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="empty-state" style="color:var(--danger-text);">${esc(e.message)}</div>`;
+  }
+}
+
+async function voidAccountEntry(entryId) {
+  if (!await confirmDialog('إلغاء القيد', `إلغاء القيد #${entryId}؟ يبقى ظاهراً في الكشف مشطوباً، وإذا كان مرتبطاً بالصندوق تُسجَّل حركة عكسية.`, 'نعم، إلغاء القيد')) {
+    openAccountStatement(acctStatementState.id);
+    return;
+  }
+  try {
+    await api('POST', `/account-entries/${entryId}/void`);
+    toast('تم إلغاء القيد', 'ok');
+    await renderAccountsScreen();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+  openAccountStatement(acctStatementState.id);
+}
+
+function printAccountStatement() {
+  const st = acctStatementState;
+  const q = new URLSearchParams({ id: st.id, currency: st.currency, from: st.from, to: st.to });
+  const win = window.open(`/print/account.html?${q}`, 'AccountPrint', 'width=900,height=950,scrollbars=yes');
+  if (win) win.focus();
 }
 
 /* =========================================================

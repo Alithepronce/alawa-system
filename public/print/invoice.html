@@ -6,10 +6,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Roboto+Mono:wght@600;700&display=swap" rel="stylesheet">
   <style>
-    @page {
-      margin: 3mm;
-      size: 80mm auto;
-    }
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
@@ -20,10 +16,17 @@
       font-size: 11.5px;
       color: #000;
       background: #fff;
-      padding: 4mm 2mm;
-      width: 74mm;
-      margin: 0 auto;
+      margin: 0;
     }
+    /* Paper size, width, zoom and calibration offset are set by applyPaper() from the print settings. */
+    #sheet {
+      position: relative;
+      margin: 0 auto;
+      padding: 2mm 1mm;
+    }
+    .paper-bar { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; font-family: 'Cairo', sans-serif; font-size: 13px; }
+    .paper-bar select { font-family: inherit; padding: 6px; border-radius: 6px; }
+    .sample-note { background: #FEF7EC; border: 1px solid #E8BE78; color: #9C6114; padding: 8px; border-radius: 6px; margin-bottom: 8px; text-align: center; font-size: 12px; }
     .num {
       font-family: 'Roboto Mono', monospace;
       direction: ltr;
@@ -112,11 +115,13 @@
     }
     @media print {
       .no-print { display: none !important; }
-      body { width: 100%; padding: 0; }
     }
   </style>
+  <style id="paperStyle"></style>
 </head>
 <body>
+<div id="sheet">
+<div class="sample-note no-print" id="sampleNote" style="display:none;">صفحة تجريبية للمعايرة — الأرقام وهمية. اطبعها وقارن حواف الطباعة بالورقة.</div>
 
 <div class="header">
   <h2 id="storeName">نظام إدارة العلوة</h2>
@@ -174,13 +179,78 @@
   <p style="margin-top:5px;font-size:9.5px;color:#555;">✨ نظام إدارة العلوة — ضمن منظومة زمام الذكية</p>
 </div>
 
-<div class="no-print" style="margin-top:14px;display:flex;gap:8px;justify-content:center;">
-  <button class="btn-print" onclick="window.print()">🖨️ طباعة الفاتورة الآن</button>
-  <button class="btn-print" style="background:#16a34a;color:#fff;" onclick="shareCurrentInvoiceWhatsApp()">💬 إرسال واتساب</button>
+</div>
+
+<div class="no-print" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;align-items:center;">
+  <div class="paper-bar">
+    <label for="paperSelect">حجم الورق لهذه الطباعة:</label>
+    <select id="paperSelect" onchange="paperCfg.paper = this.value; applyPaper()">
+      <option value="80mm">حراري 80 ملم</option>
+      <option value="58mm">حراري 58 ملم</option>
+      <option value="A5">A5</option>
+      <option value="A4">A4</option>
+    </select>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:center;">
+    <button class="btn-print" onclick="window.print()">🖨️ طباعة الفاتورة الآن</button>
+    <button class="btn-print" id="waBtn" style="background:#16a34a;color:#fff;" onclick="shareCurrentInvoiceWhatsApp()">💬 إرسال واتساب</button>
+  </div>
 </div>
 
 <script>
   let currentInvoiceData = null;
+
+  // Page sizes in mm and the zoom each gets so the 80mm-designed layout fills the sheet.
+  const PAPERS = {
+    '80mm': { w: 80, h: null, zoom: 1 },
+    '58mm': { w: 58, h: null, zoom: 0.8 },
+    'A5': { w: 148, h: 210, zoom: 1.3 },
+    'A4': { w: 210, h: 297, zoom: 1.6 }
+  };
+  const clamp = (v, min, max, dflt) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt; };
+  let paperCfg = { paper: '80mm', margin: 3, font: 100, dx: 0, dy: 0 };
+
+  function readPaperCfg(src) {
+    return {
+      paper: PAPERS[src.printPaper] ? src.printPaper : '80mm',
+      margin: clamp(src.printMarginMm, 0, 30, 3),
+      font: clamp(src.printFontScale, 60, 200, 100),
+      dx: clamp(src.printOffsetXmm, -20, 20, 0),
+      dy: clamp(src.printOffsetYmm, -20, 20, 0)
+    };
+  }
+
+  // The sheet is laid out at (content width ÷ zoom) and then zoomed, so it fills exactly the
+  // printable width; the offset nudges it to correct a printer that prints off-centre.
+  function applyPaper() {
+    const p = PAPERS[paperCfg.paper];
+    const zoom = p.zoom * paperCfg.font / 100;
+    const contentW = Math.max(p.w - 2 * paperCfg.margin, 20);
+    const size = p.h ? `${paperCfg.paper} portrait` : `${p.w}mm auto`;
+    document.getElementById('paperStyle').textContent = `
+      @page { size: ${size}; margin: ${paperCfg.margin}mm; }
+      #sheet { width: ${(contentW / zoom).toFixed(2)}mm; zoom: ${zoom}; left: ${paperCfg.dx / zoom}mm; top: ${paperCfg.dy / zoom}mm; }
+      @media screen { body { background: #e5e7eb; padding: 12px 0; } #sheet { background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); } }`;
+    document.getElementById('paperSelect').value = paperCfg.paper;
+  }
+
+  function renderSample(settings) {
+    document.getElementById('sampleNote').style.display = 'block';
+    document.getElementById('waBtn').style.display = 'none';
+    document.getElementById('storeName').textContent = settings.storeName || 'نظام إدارة العلوة';
+    if (settings.storePhone) document.getElementById('storePhone').textContent = 'هاتف: ' + settings.storePhone;
+    document.getElementById('invId').textContent = '#0000';
+    document.getElementById('invDate').textContent = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    document.getElementById('custName').textContent = 'زبون تجريبي';
+    const lines = [['طحين صفر', 10, 'كيس', 42000], ['نخالة', 5, 'كيس', 18000], ['شعير', 1, 'طن', 350000]];
+    document.getElementById('linesBody').innerHTML = lines.map(([n, q, u, pr]) => `<tr><td><strong>${n}</strong></td><td class="num">${q} ${u}</td><td class="num text-left">${fmtNum(pr)}</td><td class="num text-left"><strong>${fmtNum(q * pr)}</strong></td></tr>`).join('');
+    const total = lines.reduce((s, [, q, , pr]) => s + q * pr, 0);
+    document.getElementById('invTotal').textContent = fmtNum(total);
+    document.getElementById('invPaid').textContent = fmtNum(500000);
+    document.getElementById('invRemain').textContent = fmtNum(total - 500000);
+    document.getElementById('invPrevDebt').textContent = fmtNum(250000);
+    document.getElementById('invDebtTotal').textContent = fmtNum(total - 500000 + 250000);
+  }
 
   function fmtNum(n) {
     n = Math.round((Number(n) || 0) * 100) / 100;
@@ -225,6 +295,15 @@ _ضمن منظومة زمام الذكية_`;
     const params = new URLSearchParams(location.search);
     const id = params.get('id');
 
+    if (params.get('sample') === '1') {
+      const settings = await fetch('/api/settings').then(r => r.json()).catch(() => ({}));
+      // Values from the settings form (not yet saved) take precedence over the saved ones.
+      paperCfg = readPaperCfg({ ...settings, ...Object.fromEntries(params) });
+      applyPaper();
+      renderSample(settings);
+      return;
+    }
+
     if (!id) {
       document.body.innerHTML = '<div style="text-align:center;padding:20px;">لم يتم تحديد رقم الفاتورة</div>';
       return;
@@ -246,6 +325,8 @@ _ضمن منظومة زمام الذكية_`;
 
       const cust = customers.find(c => c.id === inv.customer_id) || { name: 'زبون عام', phone: '' };
       currentInvoiceData = { inv, cust, settings };
+      paperCfg = readPaperCfg(settings);
+      applyPaper();
 
       document.getElementById('storeName').textContent = settings.storeName || 'نظام إدارة العلوة';
       if (settings.storePhone) document.getElementById('storePhone').textContent = 'هاتف: ' + settings.storePhone;
@@ -289,6 +370,7 @@ _ضمن منظومة زمام الذكية_`;
     }
   }
 
+  applyPaper();
   loadInvoice();
 </script>
 </body>

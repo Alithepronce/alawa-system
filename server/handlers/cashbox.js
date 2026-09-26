@@ -36,6 +36,8 @@ function cashboxSummary(ctx) {
       purchases: sum('out', ['شراء', 'تسديد لمورد']),
       customerReturns: sum('out', ['مرتجع نقدي', 'إلغاء فاتورة']),
       expenses: sum('out', ['يدوي', 'مصروف يدوي']),
+      ledgerIn: list.filter(c => c.type === 'in' && c.source.startsWith('صيرفة')).reduce((s, c) => s + c.amount, 0),
+      ledgerOut: list.filter(c => c.type === 'out' && c.source.startsWith('صيرفة')).reduce((s, c) => s + c.amount, 0),
       totalIn, totalOut, net: totalIn - totalOut
     }
   };

@@ -19,7 +19,7 @@ const ROLE_PERMISSIONS = {
   'محاسب': new Set([
     'customers.read', 'customers.manage', 'customers.finance', 'customers.ledger',
     'items.read', 'items.manage', 'suppliers.read', 'suppliers.manage', 'suppliers.finance', 'suppliers.ledger',
-    'sales', 'purchases', 'returns', 'supplier.returns', 'cashbox', 'reports'
+    'sales', 'purchases', 'returns', 'supplier.returns', 'cashbox', 'reports', 'ledger'
   ]),
   'أمين مخزن': new Set([
     'customers.read', 'items.read', 'items.manage', 'inventory.adjust',

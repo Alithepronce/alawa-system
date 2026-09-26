@@ -14,6 +14,7 @@ const backup = require('./handlers/backup');
 const updater = require('./updater');
 const license = require('./handlers/license');
 const debts = require('./handlers/debts');
+const accounts = require('./handlers/accounts');
 
 // Route table: [method, path pattern with :param placeholders, handler]
 const routes = [
@@ -48,13 +49,23 @@ const routes = [
   ['PUT',    '/api/items/:id', (ctx, id) => items.updateItem(ctx, id)],
   ['DELETE', '/api/items/:id', (ctx, id) => items.deleteItem(ctx, id)],
   ['POST',   '/api/items/:id/adjust', (ctx, id) => items.adjustItem(ctx, id)],
+  ['POST',   '/api/items/:id/add-stock', (ctx, id) => items.addStock(ctx, id)],
 
   ['GET',    '/api/suppliers', (ctx) => suppliers.listSuppliers(ctx)],
   ['POST',   '/api/suppliers', (ctx) => suppliers.createSupplier(ctx)],
   ['PUT',    '/api/suppliers/:id', (ctx, id) => suppliers.updateSupplier(ctx, id)],
   ['DELETE', '/api/suppliers/:id', (ctx, id) => suppliers.deleteSupplier(ctx, id)],
   ['POST',   '/api/suppliers/:id/payment', (ctx, id) => suppliers.supplierPayment(ctx, id)],
+  ['POST',   '/api/suppliers/:id/entry', (ctx, id) => suppliers.supplierEntry(ctx, id)],
   ['GET',    '/api/suppliers/:id/ledger', (ctx, id) => suppliers.supplierLedger(ctx, id)],
+
+  ['GET',    '/api/accounts', (ctx) => accounts.listAccounts(ctx)],
+  ['POST',   '/api/accounts', (ctx) => accounts.createAccount(ctx)],
+  ['PUT',    '/api/accounts/:id', (ctx, id) => accounts.updateAccount(ctx, id)],
+  ['DELETE', '/api/accounts/:id', (ctx, id) => accounts.deleteAccount(ctx, id)],
+  ['POST',   '/api/accounts/:id/entries', (ctx, id) => accounts.addEntry(ctx, id)],
+  ['GET',    '/api/accounts/:id/statement', (ctx, id) => accounts.accountStatement(ctx, id)],
+  ['POST',   '/api/account-entries/:id/void', (ctx, id) => accounts.voidEntry(ctx, id)],
 
   ['GET',  '/api/invoices', (ctx) => invoices.listInvoices(ctx)],
   ['POST', '/api/invoices', (ctx) => invoices.createInvoice(ctx)],
