@@ -26,6 +26,7 @@ const routes = [
   ['POST', '/api/logout', (ctx) => authH.handleLogout(ctx)],
   ['GET',  '/api/me', (ctx) => authH.handleMe(ctx)],
   ['POST', '/api/me/password', (ctx) => authH.changeOwnPassword(ctx)],
+  ['POST', '/api/me/owner-pin', (ctx) => authH.setOwnerOverridePin(ctx)],
 
   ['GET',    '/api/users', (ctx) => users.listUsers(ctx)],
   ['POST',   '/api/users', (ctx) => users.createUser(ctx)],
@@ -56,6 +57,8 @@ const routes = [
   ['PUT',    '/api/suppliers/:id', (ctx, id) => suppliers.updateSupplier(ctx, id)],
   ['DELETE', '/api/suppliers/:id', (ctx, id) => suppliers.deleteSupplier(ctx, id)],
   ['POST',   '/api/suppliers/:id/payment', (ctx, id) => suppliers.supplierPayment(ctx, id)],
+  ['PUT',    '/api/suppliers/:id/payments/:paymentId', (ctx, id, paymentId) => suppliers.editSupplierPayment(ctx, id, paymentId)],
+  ['PUT',    '/api/suppliers/:id/entries/:entryId', (ctx, id, entryId) => suppliers.editSupplierEntry(ctx, id, entryId)],
   ['POST',   '/api/suppliers/:id/entry', (ctx, id) => suppliers.supplierEntry(ctx, id)],
   ['GET',    '/api/suppliers/:id/ledger', (ctx, id) => suppliers.supplierLedger(ctx, id)],
 
@@ -94,6 +97,7 @@ const routes = [
   ['GET',  '/api/backup/export-sql', (ctx) => backup.exportSql(ctx)],
   ['POST', '/api/backup/import-sql', (ctx) => backup.importSql(ctx)],
   ['GET',  '/api/backup/status', (ctx) => backup.backupStatus(ctx)],
+  ['PUT',  '/api/backup/directory', (ctx) => backup.setBackupDirectory(ctx)],
   ['GET',  '/api/backup/list', (ctx) => backup.listAutoBackups(ctx)],
   ['POST', '/api/backup/create', (ctx) => backup.triggerAutoBackup(ctx)],
 

@@ -27,6 +27,8 @@ jobs:
           if ($tagVersion -ne $appVersion) { throw "Tag v$tagVersion does not match package.json version $appVersion" }
       - name: Install dependencies
         run: npm ci
+      - name: Verify supplier financial edits and backup-related feature tests
+        run: node test_accounts.js
       - name: Build installer and publish GitHub Release assets
         run: npm run release
         env:

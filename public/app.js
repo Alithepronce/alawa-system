@@ -2155,10 +2155,11 @@ async function renderLedgerReport() {
                 <td class="num">${r.debit ? fmtNum(r.debit) : '-'}</td>
                 <td class="num">${r.credit ? fmtNum(r.credit) : '-'}</td>
                 <td style="white-space:nowrap;text-align:center;">
+                  ${type === 'supplier' && (r.paymentId || r.entryId) && currentUser?.role !== 'أمين مخزن' ? `<button class="btn btn-sm btn-secondary" style="padding:2px 6px;" onclick="openEditSupplierMovementModal(${id}, '${r.paymentId ? 'payment' : 'entry'}', ${r.paymentId || r.entryId}, ${Number(r.amount) || 0})" title="تعديل المبلغ بعد تأكيد المالك">تعديل المبلغ</button>` : ''}
                   ${invId ? `
                     <button class="btn btn-sm btn-secondary" style="padding:2px 6px;" onclick="triggerPrintPrompt(${invId})" title="طباعة الفاتورة 80 مم">🖨️</button>
                     <button class="btn btn-sm btn-whatsapp" style="padding:2px 6px;" onclick="shareInvoiceWhatsApp(${invId})" title="مشاركة الفاتورة عبر واتساب">💬</button>
-                  ` : '-'}
+                  ` : (type === 'supplier' && (r.paymentId || r.entryId) ? '' : '-')}
                 </td>
               </tr>
             `;
@@ -2171,6 +2172,37 @@ async function renderLedgerReport() {
       <span class="num" style="font-size:24px;font-weight:700;color:var(--text-heading);">${fmtNum(Math.abs(balance))} ${curr()}</span>
     </div>
   `;
+}
+
+function openEditSupplierMovementModal(supplierId, kind, movementId, amount) {
+  const needsSetup = !state.settings.ownerOverridePinConfigured;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay"><div class="modal-box" style="max-width:440px">
+      <div class="modal-header"><h3>تعديل مبلغ حركة المورد</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <p class="sub">يتغير رصيد المورد والصندوق مع المبلغ الجديد. يلزم تأكيد المالك.</p>
+        <div class="form-group"><label class="form-label">المبلغ الجديد</label><input id="supplierMovementAmount" type="number" min="0.01" step="0.01" class="form-control is-num" value="${amount}"></div>
+        <div class="form-group"><label class="form-label">${needsSetup ? 'كلمة مرور دخول المالك' : 'رمز تأكيد المالك'}</label><input id="supplierMovementOwnerPassword" type="password" inputmode="numeric" class="form-control" autocomplete="current-password"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">إلغاء</button><button class="btn btn-primary" onclick="saveSupplierMovementAmount(${supplierId}, '${kind}', ${movementId})">حفظ التعديل</button></div>
+    </div></div>`;
+}
+
+async function saveSupplierMovementAmount(supplierId, kind, movementId) {
+  try {
+    const path = kind === 'payment' ? `/suppliers/${supplierId}/payments/${movementId}` : `/suppliers/${supplierId}/entries/${movementId}`;
+    await api('PUT', path, {
+      amount: document.getElementById('supplierMovementAmount').value,
+      ownerPassword: document.getElementById('supplierMovementOwnerPassword').value
+    });
+    closeModal();
+    toast('تم تعديل الحركة وتحديث الرصيد', 'ok');
+    await loadAllData();
+    await renderLedgerReport();
+    renderSuppliersScreen();
+  } catch (error) {
+    toast(error.message, 'err');
+  }
 }
 
 /* =========================================================
@@ -2322,7 +2354,65 @@ function renderBackupScreen() {
     document.getElementById('gdriveStatus').textContent = '✅ متصل بحساب Google Drive لهذه الجلسة';
     document.getElementById('gdriveActions').style.display = 'block';
   }
+  renderBackupSettings();
   renderAutoBackupsTable();
+}
+
+async function renderBackupSettings() {
+  try {
+    const status = await api('GET', '/backup/status');
+    document.getElementById('autoBackupDirectory').textContent = status.autoBackupDirectory;
+    document.getElementById('autoBackupLastRun').textContent = status.lastAutoBackupAt
+      ? `آخر نسخة تلقائية: ${new Date(status.lastAutoBackupAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'medium' })} — تتكرر كل ${status.scheduleHours} ساعات.`
+      : `تُنشأ نسخة عند تشغيل النظام، ثم كل ${status.scheduleHours} ساعات.`;
+    document.getElementById('ownerOverridePinStatus').textContent = state.settings.ownerOverridePinConfigured
+      ? 'تم إعداد رمز تأكيد المالك.'
+      : 'لم يُعدّ الرمز بعد؛ مؤقتاً يقبل النظام كلمة مرور دخول المالك.';
+  } catch (error) {
+    document.getElementById('autoBackupLastRun').textContent = error.message;
+  }
+}
+
+async function chooseAutoBackupDirectory() {
+  try {
+    if (!window.electronAPI?.chooseBackupDirectory) throw new Error('اختيار المجلد متاح من نسخة سطح المكتب فقط');
+    const directory = await window.electronAPI.chooseBackupDirectory();
+    if (!directory) return;
+    await api('PUT', '/backup/directory', { directory });
+    const backup = await api('POST', '/backup/create');
+    toast(`تم تغيير المجلد وإنشاء نسخة احتياطية: ${backup.filename}`, 'ok');
+    await Promise.all([renderBackupSettings(), renderAutoBackupsTable()]);
+  } catch (error) {
+    toast(error.message, 'err');
+  }
+}
+
+function openOwnerOverridePinModal() {
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay"><div class="modal-box" style="max-width:440px">
+      <div class="modal-header"><h3>رمز تأكيد المالك</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <p class="sub">أدخل كلمة مرور حساب المالك الحالية للتأكيد، ثم اختر رمزاً رقمياً من 4 إلى 12 خانة. مثال: 5599.</p>
+        <div class="form-group"><label class="form-label">كلمة مرور دخول المالك الحالية</label><input id="ownerPinCurrentPassword" class="form-control" type="password" autocomplete="current-password"></div>
+        <div class="form-group"><label class="form-label">رمز التأكيد الجديد</label><input id="ownerPinNew" class="form-control is-num" type="password" inputmode="numeric" maxlength="12" autocomplete="new-password"></div>
+        <div class="form-group"><label class="form-label">تأكيد الرمز</label><input id="ownerPinConfirm" class="form-control is-num" type="password" inputmode="numeric" maxlength="12" autocomplete="new-password"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">إلغاء</button><button class="btn btn-primary" onclick="saveOwnerOverridePin()">حفظ الرمز</button></div>
+    </div></div>`;
+  }
+
+async function saveOwnerOverridePin() {
+  const pin = document.getElementById('ownerPinNew').value;
+  if (pin !== document.getElementById('ownerPinConfirm').value) { toast('الرمزان غير متطابقين', 'err'); return; }
+  try {
+    await api('POST', '/me/owner-pin', { currentPassword: document.getElementById('ownerPinCurrentPassword').value, pin });
+    state.settings.ownerOverridePinConfigured = true;
+    closeModal();
+    toast('تم حفظ رمز تأكيد المالك', 'ok');
+    renderBackupSettings();
+  } catch (error) {
+    toast(error.message, 'err');
+  }
 }
 
 async function renderAutoBackupsTable() {

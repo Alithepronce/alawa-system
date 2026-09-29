@@ -703,7 +703,13 @@
               <button class="btn btn-primary" onclick="createAutoBackupNow()">+ إنشاء نسخة احتياطية فورية الآن</button>
             </div>
             <div class="card-body">
-              <p class="sub" style="margin-bottom:12px;">يقوم النظام بأخذ نسخة احتياطية محلية تلقائية لقاعدة البيانات كل 6 ساعات وحفظها في مجلد النظام مع التدوير الذاتي.</p>
+              <p class="sub" style="margin-bottom:12px;">ينشئ النظام نسخة عند تشغيله، ثم نسخة دورية كل 6 ساعات، ويحتفظ بآخر 15 نسخة داخل المجلد المختار.</p>
+              <p class="sub" style="margin-bottom:12px;">النسخ الموجودة قبل تغيير المجلد تبقى في موقعها السابق؛ النسخ الجديدة تُحفظ في المجلد المختار.</p>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                <strong>مجلد النسخ:</strong><code id="autoBackupDirectory" dir="ltr">جاري التحميل…</code>
+                <button class="btn btn-sm btn-secondary" onclick="chooseAutoBackupDirectory()">اختيار مجلد</button>
+              </div>
+              <p class="sub" id="autoBackupLastRun" style="margin-bottom:14px;"></p>
               <div class="tbl-wrap">
                 <table>
                   <thead>
@@ -714,6 +720,15 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3><span>🔐</span> رمز تأكيد المالك</h3></div>
+            <div class="card-body">
+              <p class="sub" style="margin-bottom:10px;">يُطلب عند تعديل مبالغ دفعات وقيود الموردين. اضبطه مرة واحدة هنا؛ لا ينشئ مالكاً جديداً. يُحفظ مشفّراً، ولا يُعرض بعد الحفظ.</p>
+              <p class="sub" id="ownerOverridePinStatus" style="margin-bottom:12px;"></p>
+              <button class="btn btn-secondary" onclick="openOwnerOverridePinModal()">إعداد / تغيير الرمز</button>
             </div>
           </div>
 

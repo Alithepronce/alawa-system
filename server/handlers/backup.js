@@ -6,6 +6,7 @@ const autoBackup = require('../auto_backup');
 const EXCLUDED_TABLES = new Set(['sessions', 'login_attempts']);
 // Tables added after the first backup format; older backups may not contain them.
 const OPTIONAL_TABLES = new Set(['supplier_openings', 'invoice_requests', 'supplier_entries', 'ledger_accounts', 'ledger_entries']);
+const LOCAL_ONLY_SETTINGS = new Set(['autoBackupDirectory', 'ownerOverridePinHash', 'ownerOverridePinSalt']);
 
 const SQL_FORMAT_TAG = '-- alawa-sql-backup-v1';
 const LAST_EXTERNAL_BACKUP_KEY = 'lastExternalBackupAt';
@@ -25,14 +26,33 @@ function markExternalBackup() {
 function backupStatus(ctx) {
   requireRole(ctx, ['المالك']);
   const row = db.prepare('SELECT value FROM settings WHERE key=?').get(LAST_EXTERNAL_BACKUP_KEY);
-  return { data: { lastExternalBackupAt: row ? row.value : null } };
+  const lastAuto = db.prepare("SELECT value FROM settings WHERE key='lastAutoBackupAt'").get();
+  return { data: {
+    lastExternalBackupAt: row ? row.value : null,
+    lastAutoBackupAt: lastAuto?.value || null,
+    autoBackupDirectory: autoBackup.getBackupDirectory(),
+    scheduleHours: 6
+  } };
+}
+
+function setBackupDirectory(ctx) {
+  requireRole(ctx, ['المالك']);
+  try {
+    const directory = autoBackup.setBackupDirectory(ctx.body.directory);
+    return { data: { directory } };
+  } catch (error) {
+    throw new HttpError(400, error.message || 'تعذر حفظ مجلد النسخ الاحتياطي');
+  }
 }
 
 function exportBackup(ctx) {
   requireRole(ctx, ['المالك']);
   markExternalBackup(); // before reading, so the file itself carries its own timestamp
   const payload = { format: 'alawa-data-backup-v1', generatedAt: new Date().toISOString(), tables: {} };
-  for (const table of dataTables()) payload.tables[table] = db.prepare(`SELECT * FROM "${table}"`).all();
+  for (const table of dataTables()) {
+    payload.tables[table] = db.prepare(`SELECT * FROM "${table}"`).all()
+      .filter(row => table !== 'settings' || !LOCAL_ONLY_SETTINGS.has(row.key));
+  }
   return { data: { backup: payload, filename: `alawa-backup-${new Date().toISOString().slice(0,10)}.alawa.json` } };
 }
 
@@ -51,7 +71,7 @@ function exportSql(ctx) {
     out.push('', ddl.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, 'CREATE TABLE IF NOT EXISTS ') + ';');
     const columns = db.prepare(`PRAGMA table_info("${table}")`).all().map(c => c.name);
     const names = columns.map(c => `"${c}"`).join(',');
-    for (const row of db.prepare(`SELECT * FROM "${table}"`).all()) {
+    for (const row of db.prepare(`SELECT * FROM "${table}"`).all().filter(row => table !== 'settings' || !LOCAL_ONLY_SETTINGS.has(row.key))) {
       out.push(`INSERT OR REPLACE INTO "${table}" (${names}) VALUES (${columns.map(c => sqlLiteral(row[c])).join(',')});`);
     }
   }
@@ -176,6 +196,7 @@ function restoreBackup(session, backup, action) {
   const schema = validateBackup(backup);
   const safetyCopy = autoBackup.createBackup();
   if (!safetyCopy) throw new HttpError(500, 'تعذر إنشاء نسخة أمان قبل الاستيراد؛ لم يتم تغيير البيانات');
+  const localSettings = db.prepare('SELECT * FROM settings').all().filter(row => LOCAL_ONLY_SETTINGS.has(row.key));
 
   try {
     db.exec('PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE;');
@@ -185,6 +206,7 @@ function restoreBackup(session, backup, action) {
     for (const table of schema) {
       const rows = backup.tables[table] ?? [];
       for (const row of rows) {
+        if (table === 'settings' && LOCAL_ONLY_SETTINGS.has(row.key)) continue;
         const columns = Object.keys(row);
         if (!columns.length) throw new Error(`سجل فارغ في جدول ${table}`);
         const names = columns.map(column => `"${column}"`).join(',');
@@ -192,6 +214,8 @@ function restoreBackup(session, backup, action) {
         db.prepare(`INSERT INTO "${table}" (${names}) VALUES (${marks})`).run(...columns.map(column => row[column]));
       }
     }
+    const restoreSetting = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+    for (const setting of localSettings) restoreSetting.run(setting.key, setting.value);
     const fkErrors = db.prepare('PRAGMA foreign_key_check').all();
     if (fkErrors.length) throw new Error('تحتوي النسخة على مراجع غير متطابقة بين الجداول');
     const integrity = db.prepare('PRAGMA integrity_check').get();
@@ -218,4 +242,4 @@ function triggerAutoBackup(ctx) {
   return { data: result };
 }
 
-module.exports = { exportBackup, importBackup, exportSql, importSql, backupStatus, parseSqlBackup, listAutoBackups, triggerAutoBackup };
+module.exports = { exportBackup, importBackup, exportSql, importSql, backupStatus, setBackupDirectory, parseSqlBackup, listAutoBackups, triggerAutoBackup };

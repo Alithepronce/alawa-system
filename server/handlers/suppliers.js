@@ -1,6 +1,30 @@
 'use strict';
 const db = require('../db');
+const auth = require('../auth');
 const { HttpError, requirePermission, logActivity, num, str, nowISO } = require('../helpers');
+
+function verifyOwnerPassword(value, ctx) {
+  const password = str(value);
+  const owners = db.prepare("SELECT id,salt,password_hash FROM users WHERE role='المالك'").all();
+  if (!owners.length) throw new HttpError(403, 'حساب المالك غير موجود');
+  if (owners.some(owner => auth.isLockedOut(owner.id))) throw new HttpError(429, 'محاولات رمز المالك كثيرة — حاول بعد 30 ثانية');
+  const configuredPin = db.prepare("SELECT value FROM settings WHERE key='ownerOverridePinHash'").get();
+  const pinSalt = db.prepare("SELECT value FROM settings WHERE key='ownerOverridePinSalt'").get();
+  const valid = configuredPin && pinSalt
+    ? auth.verifyPassword(password, pinSalt.value, configuredPin.value)
+    : owners.some(owner => auth.verifyPassword(password, owner.salt, owner.password_hash));
+  for (const owner of owners) auth.recordAttempt(owner.id, ctx.ip, valid);
+  if (!valid) throw new HttpError(403, configuredPin ? 'رمز تأكيد المالك غير صحيح' : 'رمز مرور المالك غير صحيح');
+}
+
+function findLegacyCashboxRow(payment, supplierName) {
+  const rows = db.prepare(`SELECT id,note FROM cashbox WHERE type='out' AND source='تسديد لمورد'
+    AND date=? AND ABS(amount-?)<0.005
+    AND id NOT IN (SELECT cashbox_id FROM supplier_payments WHERE cashbox_id IS NOT NULL) ORDER BY id`)
+    .all(payment.date, payment.amount);
+  const exact = rows.filter(row => row.note === supplierName);
+  return exact.length ? exact[0] : rows.length === 1 ? rows[0] : null;
+}
 
 function listSuppliers(ctx) {
   const session = requirePermission(ctx, 'suppliers.read');
@@ -78,12 +102,43 @@ function supplierPayment(ctx, id) {
   const date = nowISO();
   db.exec('BEGIN');
   try {
-    db.prepare('INSERT INTO supplier_payments (supplier_id, amount, date, created_by) VALUES (?,?,?,?)').run(id, amount, date, ctx.session.id);
+    const cashbox = db.prepare('INSERT INTO cashbox (date, type, amount, source, note, created_by) VALUES (?,\'out\',?,\'تسديد لمورد\',?,?)').run(date, amount, s.name, ctx.session.id);
+    db.prepare('INSERT INTO supplier_payments (supplier_id, amount, date, created_by, cashbox_id) VALUES (?,?,?,?,?)')
+      .run(id, amount, date, ctx.session.id, Number(cashbox.lastInsertRowid));
     db.prepare('UPDATE suppliers SET balance = balance - ? WHERE id=?').run(amount, id);
-    db.prepare('INSERT INTO cashbox (date, type, amount, source, note, created_by) VALUES (?,\'out\',?,\'تسديد لمورد\',?,?)').run(date, amount, s.name, ctx.session.id);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   logActivity(ctx, 'تسديد لمورد', `${s.name}: ${amount}`);
+  return { data: { ok: true } };
+}
+
+function editSupplierPayment(ctx, supplierId, paymentId) {
+  requirePermission(ctx, 'suppliers.finance');
+  verifyOwnerPassword(ctx.body.ownerPassword, ctx);
+  const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(supplierId);
+  const payment = db.prepare('SELECT * FROM supplier_payments WHERE id=? AND supplier_id=?').get(paymentId, supplierId);
+  if (!supplier || !payment) throw new HttpError(404, 'دفعة المورد غير موجودة');
+  const amount = num(ctx.body.amount, NaN);
+  if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, 'أدخل مبلغاً صحيحاً أكبر من صفر');
+  if (payment.cashbox_id == null && !findLegacyCashboxRow(payment, supplier.name)) {
+    throw new HttpError(409, 'تعذر مطابقة حركة الصندوق لهذه الدفعة؛ لم يتم تعديل أي مبلغ');
+  }
+  const delta = amount - payment.amount;
+  db.exec('BEGIN');
+  try {
+    let cashboxId = payment.cashbox_id;
+    if (cashboxId == null) {
+      cashboxId = findLegacyCashboxRow(payment, supplier.name)?.id;
+      if (!cashboxId) throw new HttpError(409, 'تعذر مطابقة حركة الصندوق لهذه الدفعة');
+      db.prepare('UPDATE supplier_payments SET cashbox_id=? WHERE id=?').run(cashboxId, payment.id);
+    }
+    db.prepare('UPDATE supplier_payments SET amount=? WHERE id=?').run(amount, payment.id);
+    db.prepare('UPDATE suppliers SET balance=balance-? WHERE id=?').run(delta, supplier.id);
+    const updatedCashbox = db.prepare('UPDATE cashbox SET amount=? WHERE id=? AND type=\'out\' AND source=\'تسديد لمورد\'').run(amount, cashboxId);
+    if (updatedCashbox.changes !== 1) throw new HttpError(409, 'تعذر تحديث حركة الصندوق؛ أُلغي تعديل الدفعة');
+    db.exec('COMMIT');
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
+  logActivity(ctx, 'تعديل مبلغ تسديد مورد', `${supplier.name}: ${payment.amount} ← ${amount}`);
   return { data: { ok: true } };
 }
 // Manual balance entry with no cash movement. credit = we owe the supplier more (له);
@@ -109,6 +164,26 @@ function supplierEntry(ctx, id) {
   return { data: { ok: true } };
 }
 
+function editSupplierEntry(ctx, supplierId, entryId) {
+  requirePermission(ctx, 'suppliers.finance');
+  verifyOwnerPassword(ctx.body.ownerPassword, ctx);
+  const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(supplierId);
+  const entry = db.prepare('SELECT * FROM supplier_entries WHERE id=? AND supplier_id=?').get(entryId, supplierId);
+  if (!supplier || !entry) throw new HttpError(404, 'قيد المورد غير موجود');
+  const amount = num(ctx.body.amount, NaN);
+  if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, 'أدخل مبلغاً صحيحاً أكبر من صفر');
+  const delta = amount - entry.amount;
+  const signedDelta = entry.direction === 'credit' ? delta : -delta;
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE supplier_entries SET amount=? WHERE id=?').run(amount, entry.id);
+    db.prepare('UPDATE suppliers SET balance=balance+? WHERE id=?').run(signedDelta, supplier.id);
+    db.exec('COMMIT');
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
+  logActivity(ctx, 'تعديل مبلغ قيد مورد', `${supplier.name}: ${entry.amount} ← ${amount} — ${entry.note}`);
+  return { data: { ok: true } };
+}
+
 function supplierLedger(ctx, id) {
   requirePermission(ctx, 'suppliers.ledger');
   const s = db.prepare('SELECT * FROM suppliers WHERE id=?').get(id);
@@ -127,7 +202,7 @@ function supplierLedger(ctx, id) {
     });
   }
   const payments = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=? ORDER BY date').all(id);
-  for (const p of payments) rows.push({ date: p.date, desc: 'دفعة مسددة', debit: p.amount, credit: 0 });
+  for (const p of payments) rows.push({ date: p.date, desc: 'دفعة مسددة', debit: p.amount, credit: 0, paymentId: p.id, amount: p.amount });
   const returns = db.prepare('SELECT * FROM supplier_returns WHERE supplier_id=? ORDER BY date').all(id);
   for (const r of returns) {
     const label = r.method === 'credit' ? 'إرجاع مواد (خصم من الرصيد): ' : 'إرجاع مواد (نقدي): ';
@@ -136,10 +211,10 @@ function supplierLedger(ctx, id) {
   const entries = db.prepare('SELECT * FROM supplier_entries WHERE supplier_id=? ORDER BY date').all(id);
   for (const e of entries) {
     const label = e.direction === 'credit' ? 'دين مضاف للمورد (له)' : 'قيد على المورد (عليه)';
-    rows.push({ date: e.date, desc: label + (e.note ? ' - ' + e.note : ''), debit: e.direction === 'debit' ? e.amount : 0, credit: e.direction === 'credit' ? e.amount : 0 });
+    rows.push({ date: e.date, desc: label + (e.note ? ' - ' + e.note : ''), debit: e.direction === 'debit' ? e.amount : 0, credit: e.direction === 'credit' ? e.amount : 0, entryId: e.id, amount: e.amount });
   }
   rows.sort((a, b) => new Date(a.date) - new Date(b.date));
   return { data: { rows, balance: s.balance, supplier: s } };
 }
 
-module.exports = { listSuppliers, createSupplier, updateSupplier, deleteSupplier, supplierPayment, supplierEntry, supplierLedger };
+module.exports = { listSuppliers, createSupplier, updateSupplier, deleteSupplier, supplierPayment, editSupplierPayment, supplierEntry, editSupplierEntry, supplierLedger };

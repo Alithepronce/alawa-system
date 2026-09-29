@@ -4,13 +4,28 @@ const path = require('node:path');
 const db = require('./db');
 
 const DATA_DIR = require('./data-path');
-const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const DEFAULT_BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_PATH = path.join(DATA_DIR, 'alawa.db');
 const LICENSE_PATH = path.join(DATA_DIR, '.license.json');
 const MAX_BACKUPS = 15;
 
-if (!fs.existsSync(BACKUP_DIR)) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+if (!fs.existsSync(DEFAULT_BACKUP_DIR)) fs.mkdirSync(DEFAULT_BACKUP_DIR, { recursive: true });
+
+function getBackupDirectory() {
+  const setting = db.prepare("SELECT value FROM settings WHERE key='autoBackupDirectory'").get();
+  return setting?.value || DEFAULT_BACKUP_DIR;
+}
+
+function setBackupDirectory(directory) {
+  if (typeof directory !== 'string' || !path.isAbsolute(directory)) throw new Error('اختر مجلداً صالحاً للنسخ الاحتياطي');
+  const resolved = path.resolve(directory);
+  fs.mkdirSync(resolved, { recursive: true });
+  const probe = path.join(resolved, `.alawa-write-check-${process.pid}-${Date.now()}`);
+  let created = false;
+  try { fs.writeFileSync(probe, '', { flag: 'wx' }); created = true; }
+  finally { if (created) { try { fs.unlinkSync(probe); } catch (_) {} } }
+  db.prepare("INSERT INTO settings (key,value) VALUES ('autoBackupDirectory',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(resolved);
+  return resolved;
 }
 
 function pad(n) {
@@ -28,12 +43,12 @@ function getTimestamp() {
   return `${yr}-${mo}-${da}_${hr}-${mi}-${se}`;
 }
 
-function cleanOldBackups() {
+function cleanOldBackups(backupDir) {
   try {
-    const files = fs.readdirSync(BACKUP_DIR)
+    const files = fs.readdirSync(backupDir)
       .filter(f => f.startsWith('alawa_backup_') && f.endsWith('.db'))
       .map(f => {
-        const full = path.join(BACKUP_DIR, f);
+        const full = path.join(backupDir, f);
         return { name: f, path: full, time: fs.statSync(full).mtimeMs };
       })
       .sort((a, b) => b.time - a.time);
@@ -52,7 +67,7 @@ function cleanOldBackups() {
   }
 }
 
-function createBackup() {
+function createBackup({ scheduled = false } = {}) {
   let targetPath = null;
   let licenseCopyPath = null;
   try {
@@ -63,8 +78,10 @@ function createBackup() {
       db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
     } catch (_) {}
 
+    const backupDir = getBackupDirectory();
+    fs.mkdirSync(backupDir, { recursive: true });
     const filename = `alawa_backup_${getTimestamp()}.db`;
-    targetPath = path.join(BACKUP_DIR, filename);
+    targetPath = path.join(backupDir, filename);
     licenseCopyPath = targetPath.replace(/\.db$/, '.license.json');
 
     fs.copyFileSync(DB_PATH, targetPath);
@@ -77,7 +94,11 @@ function createBackup() {
     if (!integrity || integrity.integrity_check !== 'ok') throw new Error('فشل فحص سلامة قاعدة بيانات النسخة الاحتياطية');
     const stats = fs.statSync(targetPath);
 
-    cleanOldBackups();
+    cleanOldBackups(backupDir);
+    if (scheduled) {
+      db.prepare("INSERT INTO settings (key,value) VALUES ('lastAutoBackupAt',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        .run(new Date().toISOString());
+    }
 
     return {
       filename,
@@ -96,10 +117,11 @@ function createBackup() {
 
 function listBackups() {
   try {
-    return fs.readdirSync(BACKUP_DIR)
+    const backupDir = getBackupDirectory();
+    return fs.readdirSync(backupDir)
       .filter(f => f.startsWith('alawa_backup_') && f.endsWith('.db'))
       .map(f => {
-        const full = path.join(BACKUP_DIR, f);
+        const full = path.join(backupDir, f);
         const st = fs.statSync(full);
         return {
           filename: f,
@@ -116,7 +138,7 @@ function listBackups() {
 // Auto-run backup on startup after 5 seconds, then every 6 hours
 setTimeout(() => {
   try {
-    const res = createBackup();
+    const res = createBackup({ scheduled: true });
     if (res) console.log(`  Auto-backup created: ${res.filename} (${(res.sizeBytes / 1024).toFixed(1)} KB)`);
   } catch (e) {
     console.error('  Startup auto-backup failed:', e.message);
@@ -125,7 +147,7 @@ setTimeout(() => {
 
 setInterval(() => {
   try {
-    createBackup();
+    createBackup({ scheduled: true });
   } catch (e) {
     console.error('  Scheduled auto-backup failed:', e.message);
   }
@@ -133,5 +155,7 @@ setInterval(() => {
 
 module.exports = {
   createBackup,
-  listBackups
+  listBackups,
+  getBackupDirectory,
+  setBackupDirectory
 };

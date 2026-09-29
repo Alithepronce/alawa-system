@@ -15,6 +15,8 @@ const items = require('./server/handlers/items');
 const accounts = require('./server/handlers/accounts');
 const backup = require('./server/handlers/backup');
 const settings = require('./server/handlers/settings');
+const authHandlers = require('./server/handlers/auth_handlers');
+const auth = require('./server/auth');
 const { localDateStr } = require('./server/helpers');
 
 const owner = { id: 1, name: 'اختبار', role: 'المالك' };
@@ -25,7 +27,18 @@ const cashRows = () => db.prepare('SELECT type, amount, source FROM cashbox ORDE
 const today = localDateStr(new Date().toISOString());
 
 try {
-  db.prepare("INSERT INTO users (id,name,role,password_hash,salt) VALUES (1,'اختبار','المالك','x','x'), (2,'محاسب','محاسب','x','x')").run();
+  const ownerLogin = auth.hashPassword('owner-login-123');
+  db.prepare("INSERT INTO users (id,name,role,password_hash,salt) VALUES (1,'اختبار','المالك',?,?), (2,'محاسب','محاسب','x','x')")
+    .run(ownerLogin.hash, ownerLogin.salt);
+  authHandlers.setOwnerOverridePin(ctx({ currentPassword: 'owner-login-123', pin: '5599' }));
+  assert.equal(settings.getSettings(ctx()).data.ownerOverridePinConfigured, true);
+  assert.equal(JSON.stringify(settings.getSettings(ctx())).includes(ownerLogin.hash), false, 'secrets are not returned from settings');
+  const selectedBackupDir = path.join(dataDir, 'selected-backups');
+  assert.equal(backup.setBackupDirectory(ctx({ directory: selectedBackupDir })).data.directory, selectedBackupDir);
+  const immediateBackup = backup.triggerAutoBackup(ctx()).data;
+  assert.ok(fs.existsSync(path.join(selectedBackupDir, immediateBackup.filename)));
+  assert.equal(backup.backupStatus(ctx()).data.scheduleHours, 6);
+  httpError(() => backup.setBackupDirectory(ctx({ directory: 'relative-path' })), 400);
 
   // Supplier manual entries: credit raises what we owe, debit lowers it (and can go negative).
   const sid = suppliers.createSupplier(ctx({ name: 'مورد' })).data.id;
@@ -37,7 +50,24 @@ try {
   const sLedger = suppliers.supplierLedger(ctx(), sid).data.rows;
   assert.deepEqual(sLedger.map(r => [r.debit, r.credit]), [[0, 300000], [500000, 0]]);
   assert.equal(cashRows().length, 0, 'supplier entries never touch the cashbox');
+  const supplierEntryIds = db.prepare('SELECT id FROM supplier_entries WHERE supplier_id=? ORDER BY id').all(sid).map(row => row.id);
+  httpError(() => suppliers.editSupplierEntry(ctx({ amount: 250000, ownerPassword: 'bad' }), sid, supplierEntryIds[0]), 403);
+  suppliers.editSupplierEntry(ctx({ amount: 250000, ownerPassword: '5599' }), sid, supplierEntryIds[0]);
+  suppliers.editSupplierEntry(ctx({ amount: 450000, ownerPassword: '5599' }), sid, supplierEntryIds[1]);
+  assert.equal(db.prepare('SELECT balance FROM suppliers WHERE id=?').get(sid).balance, -200000);
+  assert.deepEqual(suppliers.supplierLedger(ctx(), sid).data.rows.map(row => [row.debit, row.credit]), [[0, 250000], [450000, 0]]);
   httpError(() => suppliers.deleteSupplier(ctx(), sid), 400);
+
+  // Editing an old supplier payment keeps its linked cashbox amount and supplier balance in sync.
+  const paidSupplierId = suppliers.createSupplier(ctx({ name: 'مورد دفعات', openingBalance: 150000 })).data.id;
+  suppliers.supplierPayment(ctx({ amount: 30000 }), paidSupplierId);
+  const payment = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=?').get(paidSupplierId);
+  db.prepare('UPDATE supplier_payments SET cashbox_id=NULL WHERE id=?').run(payment.id); // legacy row backfill path
+  httpError(() => suppliers.editSupplierPayment(ctx({ amount: 40000, ownerPassword: 'wrong' }), paidSupplierId, payment.id), 403);
+  suppliers.editSupplierPayment(ctx({ amount: 50000, ownerPassword: '5599' }), paidSupplierId, payment.id);
+  assert.equal(db.prepare('SELECT balance FROM suppliers WHERE id=?').get(paidSupplierId).balance, 100000);
+  assert.equal(db.prepare('SELECT amount FROM cashbox WHERE id=(SELECT cashbox_id FROM supplier_payments WHERE id=?)').get(payment.id).amount, 50000);
+  httpError(() => suppliers.editSupplierPayment(ctx({ amount: 0, ownerPassword: '5599' }), paidSupplierId, payment.id), 400);
 
   // Add stock: bag conversion and weighted average cost.
   db.prepare("INSERT INTO items (id,name,bag_weight,stock_kg,avg_cost_per_kg) VALUES (1,'طحين',50,1000,400)").run();
@@ -66,6 +96,7 @@ try {
   let list = accounts.listAccounts(ctx()).data;
   assert.deepEqual(list[0].balances, { IQD: 650000, USD: -500 });
   assert.deepEqual(cashRows(), [
+    { type: 'out', amount: 50000, source: 'تسديد لمورد' },
     { type: 'out', amount: 1000000, source: 'صيرفة - دفع' },
     { type: 'in', amount: 400000, source: 'صيرفة - قبض' }
   ]);
@@ -86,7 +117,7 @@ try {
   accounts.voidEntry(ctx(), noCash);
   list = accounts.listAccounts(ctx()).data;
   assert.deepEqual(list[0].balances, { IQD: -400000, USD: -500 });
-  assert.deepEqual(cashRows().slice(2), [{ type: 'in', amount: 1000000, source: 'صيرفة - إلغاء قيد' }]);
+  assert.deepEqual(cashRows().slice(3), [{ type: 'in', amount: 1000000, source: 'صيرفة - إلغاء قيد' }]);
   const afterVoid = accounts.accountStatement(ctx({}, { currency: 'IQD' }), aid).data;
   assert.equal(afterVoid.rows.length, 3);
   assert.ok(afterVoid.rows[0].voided);
@@ -108,12 +139,20 @@ try {
 
   // New tables survive a backup round trip, and backups made before they existed still import.
   const { sql } = backup.exportSql(ctx()).data;
+  assert.equal(sql.includes('ownerOverridePinHash'), false, 'backup SQL excludes the local owner PIN');
+  assert.equal(sql.includes('autoBackupDirectory'), false, 'backup SQL excludes machine-specific backup paths');
   backup.importSql(ctx({ sql }));
+  assert.equal(backup.backupStatus(ctx()).data.autoBackupDirectory, selectedBackupDir);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM ledger_entries').get().n, 4);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM supplier_entries').get().n, 2);
   const legacy = backup.exportBackup(ctx()).data.backup;
+  assert.equal(legacy.tables.settings.some(row => row.key === 'ownerOverridePinHash' || row.key === 'autoBackupDirectory'), false);
+  legacy.tables.settings.push({ key: 'autoBackupDirectory', value: path.join(dataDir, 'untrusted-path') });
+  legacy.tables.settings.push({ key: 'ownerOverridePinHash', value: 'untrusted-hash' });
   for (const t of ['supplier_entries', 'ledger_accounts', 'ledger_entries']) delete legacy.tables[t];
   backup.importBackup(ctx({ backup: legacy }));
+  assert.equal(backup.backupStatus(ctx()).data.autoBackupDirectory, selectedBackupDir);
+  assert.notEqual(db.prepare("SELECT value FROM settings WHERE key='ownerOverridePinHash'").get().value, 'untrusted-hash');
   assert.equal(db.prepare('SELECT COUNT(*) n FROM ledger_entries').get().n, 0);
 
   console.log('Accounts, supplier entry and add-stock tests passed');

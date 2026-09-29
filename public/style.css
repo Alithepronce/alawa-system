@@ -483,6 +483,8 @@ body {
 /* ─── CONTENT AREA ─── */
 .content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-base);
   display: flex;
@@ -492,6 +494,8 @@ body {
 .screen {
   display: none;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
 }
@@ -536,6 +540,8 @@ body {
 /* ─── PAGE BODY ─── */
 .page-body {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px 24px;
 }
@@ -684,6 +690,7 @@ select.form-control, select {
 
 /* ═══ CARDS ═══ */
 .card {
+  min-width: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-md);
@@ -1170,14 +1177,18 @@ tbody tr:last-child td {
 /* ═══ GRID HELPERS ═══ */
 .grid2, .g2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .grid3, .g3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.grid2 > *, .g2 > *, .grid3 > *, .g3 > * {
+  min-width: 0;
 }
 
 .empty-state {
@@ -1385,6 +1396,24 @@ tbody tr:last-child td {
 @media (max-width: 1024px) {
   .pos-layout {
     grid-template-columns: 1fr;
+  }
+  .grid3, .g3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .grid2, .g2, .grid3, .g3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page-body {
+    padding: 16px;
+  }
+  .page-topbar {
+    padding-inline: 16px;
+  }
+  .page-topbar-actions {
+    flex-wrap: wrap;
   }
 }
 

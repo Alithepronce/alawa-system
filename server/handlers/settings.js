@@ -14,6 +14,9 @@ function getSettings(ctx) {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const out = { ...DEFAULT_SETTINGS };
   rows.forEach(r => out[r.key] = r.value);
+  if (session.role === 'المالك') out.ownerOverridePinConfigured = !!out.ownerOverridePinHash;
+  delete out.ownerOverridePinHash;
+  delete out.ownerOverridePinSalt;
   if (session.role !== 'المالك') { delete out.gdriveClientId; delete out.ownerPhone; }
   return { data: out };
 }

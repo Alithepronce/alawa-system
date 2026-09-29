@@ -36,6 +36,9 @@ function runMigrations() {
     db.exec('ALTER TABLE suppliers ADD COLUMN deleted_at TEXT;');
   }
   if (!getColumns('payments').includes('is_deposit')) db.exec('ALTER TABLE payments ADD COLUMN is_deposit INTEGER NOT NULL DEFAULT 0;');
+  if (!getColumns('supplier_payments').includes('cashbox_id')) {
+    db.exec('ALTER TABLE supplier_payments ADD COLUMN cashbox_id INTEGER REFERENCES cashbox(id);');
+  }
   const userCols = getColumns('users');
   if (!userCols.includes('must_change_password')) db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;');
   const auth = require('./auth');
@@ -105,6 +108,18 @@ function runMigrations() {
       AND NOT EXISTS (SELECT 1 FROM supplier_payments p WHERE p.supplier_id=s.id)
       AND NOT EXISTS (SELECT 1 FROM supplier_returns r WHERE r.supplier_id=s.id);
   `);
+
+  // Link legacy supplier payments to their cashbox rows so later owner-approved edits stay in sync.
+  for (const payment of db.prepare(`SELECT p.id,p.supplier_id,p.amount,p.date,s.name
+    FROM supplier_payments p JOIN suppliers s ON s.id=p.supplier_id WHERE p.cashbox_id IS NULL ORDER BY p.id`).all()) {
+    const candidates = db.prepare(`SELECT id,note FROM cashbox WHERE type='out' AND source='تسديد لمورد'
+      AND date=? AND ABS(amount-?)<0.005
+      AND id NOT IN (SELECT cashbox_id FROM supplier_payments WHERE cashbox_id IS NOT NULL) ORDER BY id`)
+      .all(payment.date, payment.amount);
+    const exact = candidates.filter(row => row.note === payment.name);
+    const match = exact.length ? exact[0] : candidates.length === 1 ? candidates[0] : null;
+    if (match) db.prepare('UPDATE supplier_payments SET cashbox_id=? WHERE id=?').run(match.id, payment.id);
+  }
 }
 
 runMigrations();

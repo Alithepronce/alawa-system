@@ -50,6 +50,20 @@ function changeOwnPassword(ctx) {
   logActivity(ctx, 'تغيير رمز الدخول', '');
   return { data: { ok: true } };
 }
+function setOwnerOverridePin(ctx) {
+  const session = requireAuth(ctx);
+  if (session.role !== 'المالك') throw new HttpError(403, 'هذا الإعداد للمالك فقط');
+  const user = db.prepare("SELECT * FROM users WHERE id=? AND role='المالك'").get(session.id);
+  if (!user || !auth.verifyPassword(str(ctx.body.currentPassword), user.salt, user.password_hash)) throw new HttpError(403, 'رمز دخول المالك الحالي غير صحيح');
+  const pin = str(ctx.body.pin);
+  if (!/^\d{4,12}$/.test(pin)) throw new HttpError(400, 'اختر رمزاً رقمياً من 4 إلى 12 خانة');
+  const { hash, salt } = auth.hashPassword(pin);
+  const save = db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+  save.run('ownerOverridePinHash', hash);
+  save.run('ownerOverridePinSalt', salt);
+  logActivity(ctx, 'تعيين رمز تأكيد المالك', '');
+  return { data: { ok: true } };
+}
 function handleLogout(ctx) {
   const cookies = auth.parseCookies(ctx.req);
   auth.destroySession(cookies.session);
@@ -60,4 +74,4 @@ function handleMe(ctx) {
   return { data: { id: s.id, name: s.name, role: s.role, mustChangePassword: !!s.must_change_password } };
 }
 
-module.exports = { handleLogin, handleLogout, handleMe, changeOwnPassword };
+module.exports = { handleLogin, handleLogout, handleMe, changeOwnPassword, setOwnerOverridePin };

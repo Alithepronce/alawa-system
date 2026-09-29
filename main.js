@@ -45,6 +45,13 @@ ipcMain.handle('updates:check', async () => {
   return { version: result?.updateInfo?.version || null };
 });
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('backup:choose-directory', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'اختيار مجلد النسخ الاحتياطي التلقائي',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  return canceled ? null : filePaths[0] || null;
+});
 // Save the calling window's page as an A4 PDF chosen by the user, then open it.
 ipcMain.handle('print:pdf', async (event, { fileName, landscape } = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);

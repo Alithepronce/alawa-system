@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   print: () => window.print(),
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+  chooseBackupDirectory: () => ipcRenderer.invoke('backup:choose-directory'),
   savePDF: options => ipcRenderer.invoke('print:pdf', options),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
